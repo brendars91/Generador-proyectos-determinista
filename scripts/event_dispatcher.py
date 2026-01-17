@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 """
-AGCCE Event Dispatcher v1.0
+AGCCE Event Dispatcher v2.0 (FINAL)
 Webhook-First Event Dispatcher para integracion con n8n.
 
-DIRECTIVAS:
-1. Solo emitir webhooks en hitos criticos (no cada paso)
-2. Idempotencia via plan_id
-3. Credential Isolation: Webhooks URL externos, no env vars del sistema
-
-EVENTOS CRITICOS:
-- PLAN_VALIDATED: Plan generado y validado exitosamente
-- EXECUTION_ERROR: Error durante ejecucion
-- EVIDENCE_READY: Evidencia recopilada, lista para reporte
+MEJORAS FINALES:
+1. Healthcheck Handshake (Ping) - Verifica disponibilidad de n8n
+2. Retry Logic con Backoff (1s, 5s, 15s) - Resiliencia ante micro-cortes
+3. System Context - Incluye version del bundle y model_id en cada payload
+4. Cola local - Si n8n no responde, guarda en logs/queue.jsonl
 
 Uso:
   from event_dispatcher import EventDispatcher
+  EventDispatcher.healthcheck()  # Verificar n8n disponible
   EventDispatcher.emit("PLAN_VALIDATED", {"plan_id": "PLAN-XXX", ...})
 """
 
@@ -25,7 +22,7 @@ import time
 import hashlib
 import threading
 from datetime import datetime
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 
@@ -52,10 +49,19 @@ except ImportError:
     Telemetry = None
 
 
-# Configuracion
+# =============================================================================
+# CONFIGURACION
+# =============================================================================
+
 CONFIG_FILE = "config/n8n_webhooks.json"
+BUNDLE_FILE = "config/bundle.json"
 EVENT_LOG_FILE = "logs/events.jsonl"
 IDEMPOTENCY_FILE = "logs/idempotency_keys.json"
+QUEUE_FILE = "logs/queue.jsonl"  # Cola local para eventos fallidos
+
+# Retry con Backoff exponencial (1s, 5s, 15s)
+RETRY_DELAYS = [1, 5, 15]
+MAX_RETRIES = 3
 
 # Eventos criticos permitidos
 CRITICAL_EVENTS = {
@@ -64,9 +70,56 @@ CRITICAL_EVENTS = {
     "EVIDENCE_READY": "Evidencia lista para envio",
     "SECURITY_BREACH_ATTEMPT": "Intento de brecha de seguridad detectado",
     "HIGH_LATENCY_THRESHOLD": "Umbral de latencia excedido",
-    "HITL_TIMEOUT": "Timeout esperando aprobacion humana"
+    "HITL_TIMEOUT": "Timeout esperando aprobacion humana",
+    "HEARTBEAT": "Healthcheck ping"
 }
 
+
+# =============================================================================
+# SYSTEM CONTEXT
+# =============================================================================
+
+def load_bundle_info() -> Dict[str, str]:
+    """Carga informacion del bundle para system_context."""
+    default_info = {
+        "bundle_id": "BNDL-AGCCE-ULTRA-V2-FINAL",
+        "version": "2.0.0-ULTRA-FINAL",
+        "model_id": "gemini-2.5-pro"
+    }
+    
+    if os.path.exists(BUNDLE_FILE):
+        try:
+            with open(BUNDLE_FILE, 'r', encoding='utf-8') as f:
+                bundle = json.load(f)
+                return {
+                    "bundle_id": bundle.get("bundle_id", default_info["bundle_id"]),
+                    "version": bundle.get("version", default_info["version"]),
+                    "model_id": bundle.get("model_routing", {}).get(
+                        "planning_and_debug", default_info["model_id"]
+                    )
+                }
+        except:
+            pass
+    
+    return default_info
+
+
+def get_system_context() -> Dict[str, Any]:
+    """Genera system_context para incluir en cada payload."""
+    bundle_info = load_bundle_info()
+    
+    return {
+        "bundle_id": bundle_info["bundle_id"],
+        "bundle_version": bundle_info["version"],
+        "model_id": bundle_info["model_id"],
+        "hostname": os.environ.get("COMPUTERNAME", "local"),
+        "dispatcher_version": "2.0.0-FINAL"
+    }
+
+
+# =============================================================================
+# UTILIDADES
+# =============================================================================
 
 def load_webhook_config() -> Dict[str, str]:
     """Carga configuracion de webhooks."""
@@ -77,6 +130,7 @@ def load_webhook_config() -> Dict[str, str]:
         "SECURITY_BREACH_ATTEMPT": "",
         "HIGH_LATENCY_THRESHOLD": "",
         "HITL_TIMEOUT": "",
+        "HEARTBEAT": "",
         "_comment": "Reemplaza URLs vacias con tus webhooks de n8n"
     }
     
@@ -87,7 +141,6 @@ def load_webhook_config() -> Dict[str, str]:
         except:
             pass
     
-    # Crear archivo de configuracion si no existe
     os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
     with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
         json.dump(default_config, f, indent=2)
@@ -139,14 +192,41 @@ def log_event(event_type: str, payload: Dict, success: bool, error: str = None) 
         f.write(json.dumps(entry, ensure_ascii=False) + '\n')
 
 
+def queue_event(event_type: str, payload: Dict) -> None:
+    """Guarda evento en cola local para reintento posterior."""
+    os.makedirs("logs", exist_ok=True)
+    
+    entry = {
+        "queued_at": datetime.now().isoformat(),
+        "event_type": event_type,
+        "payload": payload,
+        "status": "pending"
+    }
+    
+    with open(QUEUE_FILE, 'a', encoding='utf-8') as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + '\n')
+    
+    log_warn(f"Evento encolado localmente: {event_type}")
+
+
+# =============================================================================
+# EVENT DISPATCHER
+# =============================================================================
+
 class EventDispatcher:
     """
-    Dispatcher de eventos para n8n.
-    Implementa Webhook-First pattern con idempotencia.
+    Dispatcher de eventos v2.0 para n8n.
+    
+    Mejoras:
+    - Healthcheck Handshake
+    - Retry con Backoff (1s, 5s, 15s)
+    - System Context en cada payload
+    - Cola local si n8n no disponible
     """
     
     _config: Dict[str, str] = None
     _initialized: bool = False
+    _n8n_available: bool = None
     
     @classmethod
     def _ensure_initialized(cls) -> None:
@@ -168,11 +248,8 @@ class EventDispatcher:
         return event_type in CRITICAL_EVENTS
     
     @classmethod
-    def check_idempotency(cls, event_type: str, plan_id: str) -> tuple:
-        """
-        Verifica idempotencia.
-        Returns: (is_duplicate, idempotency_key)
-        """
+    def check_idempotency(cls, event_type: str, plan_id: str) -> Tuple[bool, str]:
+        """Verifica idempotencia. Returns: (is_duplicate, idempotency_key)"""
         if not plan_id:
             return False, None
         
@@ -184,6 +261,70 @@ class EventDispatcher:
         
         return False, key
     
+    # =========================================================================
+    # HEALTHCHECK HANDSHAKE
+    # =========================================================================
+    
+    @classmethod
+    def healthcheck(cls, timeout: int = 5) -> bool:
+        """
+        HEALTHCHECK HANDSHAKE
+        Verifica si n8n esta disponible enviando un ping al webhook HEARTBEAT.
+        """
+        cls._ensure_initialized()
+        
+        heartbeat_url = cls.get_webhook_url("HEARTBEAT")
+        if not heartbeat_url:
+            # Intentar con cualquier webhook configurado
+            for event_type in CRITICAL_EVENTS:
+                url = cls.get_webhook_url(event_type)
+                if url:
+                    heartbeat_url = url
+                    break
+        
+        if not heartbeat_url:
+            log_warn("ADVERTENCIA: n8n no configurado. Los reportes se guardaran en cola local.")
+            cls._n8n_available = False
+            return False
+        
+        try:
+            ping_payload = {
+                "event_type": "HEARTBEAT",
+                "timestamp": datetime.now().isoformat(),
+                "system_context": get_system_context()
+            }
+            
+            data = json.dumps(ping_payload).encode('utf-8')
+            request = Request(
+                heartbeat_url,
+                data=data,
+                headers={'Content-Type': 'application/json'},
+                method='POST'
+            )
+            
+            with urlopen(request, timeout=timeout) as response:
+                if response.status >= 200 and response.status < 300:
+                    log_pass("n8n disponible (healthcheck OK)")
+                    cls._n8n_available = True
+                    return True
+        
+        except Exception as e:
+            log_warn(f"ADVERTENCIA: n8n no disponible ({e}). Reportes en cola local.")
+            cls._n8n_available = False
+        
+        return False
+    
+    @classmethod
+    def is_n8n_available(cls) -> bool:
+        """Retorna estado de disponibilidad de n8n."""
+        if cls._n8n_available is None:
+            cls.healthcheck()
+        return cls._n8n_available or False
+    
+    # =========================================================================
+    # EMIT CON RETRY + BACKOFF
+    # =========================================================================
+    
     @classmethod
     def emit(
         cls,
@@ -193,16 +334,13 @@ class EventDispatcher:
         async_mode: bool = True
     ) -> bool:
         """
-        Emite un evento via webhook.
+        Emite un evento via webhook con retry logic.
         
         Args:
             event_type: Tipo de evento critico
             payload: Datos del evento (debe incluir plan_id)
             force: Ignorar idempotencia
             async_mode: Emitir en background
-        
-        Returns:
-            bool: True si el evento fue emitido/encolado
         """
         cls._ensure_initialized()
         
@@ -225,25 +363,56 @@ class EventDispatcher:
             log_info(f"Evento duplicado ignorado: {event_type} ({idempotency_key})")
             return False
         
-        # Preparar payload
+        # Preparar payload con SYSTEM CONTEXT
         full_payload = {
             "event_type": event_type,
             "event_description": CRITICAL_EVENTS.get(event_type, ""),
             "timestamp": datetime.now().isoformat(),
             "idempotency_key": idempotency_key,
+            "system_context": get_system_context(),  # NUEVO
             "payload": payload
         }
         
         if async_mode:
             thread = threading.Thread(
-                target=cls._send_webhook,
+                target=cls._send_with_retry,
                 args=(webhook_url, full_payload, event_type, idempotency_key)
             )
             thread.daemon = True
             thread.start()
             return True
         else:
-            return cls._send_webhook(webhook_url, full_payload, event_type, idempotency_key)
+            return cls._send_with_retry(webhook_url, full_payload, event_type, idempotency_key)
+    
+    @classmethod
+    def _send_with_retry(
+        cls,
+        url: str,
+        payload: Dict,
+        event_type: str,
+        idempotency_key: str
+    ) -> bool:
+        """
+        RETRY LOGIC CON BACKOFF EXPONENCIAL
+        Intentos: 3 con delays de 1s, 5s, 15s
+        """
+        for attempt in range(MAX_RETRIES):
+            success = cls._send_webhook(url, payload, event_type, idempotency_key)
+            
+            if success:
+                return True
+            
+            # Si no es el ultimo intento, esperar con backoff
+            if attempt < MAX_RETRIES - 1:
+                delay = RETRY_DELAYS[attempt]
+                log_info(f"Reintentando en {delay}s... (intento {attempt + 2}/{MAX_RETRIES})")
+                time.sleep(delay)
+        
+        # Todos los intentos fallaron - encolar localmente
+        queue_event(event_type, payload)
+        log_fail(f"Evento {event_type} encolado localmente despues de {MAX_RETRIES} intentos")
+        
+        return False
     
     @classmethod
     def _send_webhook(
@@ -253,7 +422,7 @@ class EventDispatcher:
         event_type: str,
         idempotency_key: str
     ) -> bool:
-        """Envia webhook HTTP POST."""
+        """Envia webhook HTTP POST (un solo intento)."""
         try:
             data = json.dumps(payload).encode('utf-8')
             
@@ -263,7 +432,8 @@ class EventDispatcher:
                 headers={
                     'Content-Type': 'application/json',
                     'X-AGCCE-Event': event_type,
-                    'X-Idempotency-Key': idempotency_key or ''
+                    'X-Idempotency-Key': idempotency_key or '',
+                    'X-Bundle-Version': payload.get('system_context', {}).get('bundle_version', '')
                 },
                 method='POST'
             )
@@ -272,14 +442,12 @@ class EventDispatcher:
                 status = response.status
                 
                 if status >= 200 and status < 300:
-                    # Exito - guardar idempotency key
                     if idempotency_key:
                         save_idempotency_key(idempotency_key, datetime.now().isoformat())
                     
                     log_pass(f"Webhook enviado: {event_type}")
                     log_event(event_type, payload.get("payload", {}), True)
                     
-                    # Registrar en telemetria
                     if Telemetry:
                         Telemetry.record_async({
                             "contract": "AGCCE-OBS-V1",
@@ -287,7 +455,8 @@ class EventDispatcher:
                             "timestamp": datetime.now().isoformat(),
                             "metrics": {
                                 "event_type": event_type,
-                                "success": True
+                                "success": True,
+                                "retries": 0
                             }
                         })
                     
@@ -296,16 +465,16 @@ class EventDispatcher:
                     raise Exception(f"HTTP {status}")
         
         except (URLError, HTTPError) as e:
-            error_msg = str(e)
-            log_fail(f"Error webhook {event_type}: {error_msg}")
-            log_event(event_type, payload.get("payload", {}), False, error_msg)
+            log_event(event_type, payload.get("payload", {}), False, str(e))
             return False
         
         except Exception as e:
-            error_msg = str(e)
-            log_fail(f"Error webhook {event_type}: {error_msg}")
-            log_event(event_type, payload.get("payload", {}), False, error_msg)
+            log_event(event_type, payload.get("payload", {}), False, str(e))
             return False
+    
+    # =========================================================================
+    # METODOS HELPERS
+    # =========================================================================
     
     @classmethod
     def emit_plan_validated(cls, plan_id: str, plan_data: Dict) -> bool:
@@ -328,12 +497,7 @@ class EventDispatcher:
         })
     
     @classmethod
-    def emit_evidence_ready(
-        cls,
-        plan_id: str,
-        evidence_path: str,
-        summary: Dict
-    ) -> bool:
+    def emit_evidence_ready(cls, plan_id: str, evidence_path: str, summary: Dict) -> bool:
         """Emite evento EVIDENCE_READY."""
         return cls.emit("EVIDENCE_READY", {
             "plan_id": plan_id,
@@ -350,7 +514,52 @@ class EventDispatcher:
             "details": details,
             "severity": "critical"
         })
+    
+    @classmethod
+    def process_queue(cls) -> int:
+        """Procesa eventos encolados localmente. Retorna numero de eventos procesados."""
+        if not os.path.exists(QUEUE_FILE):
+            return 0
+        
+        processed = 0
+        remaining = []
+        
+        with open(QUEUE_FILE, 'r', encoding='utf-8') as f:
+            for line in f:
+                try:
+                    entry = json.loads(line.strip())
+                    if entry.get('status') == 'pending':
+                        event_type = entry.get('event_type')
+                        payload = entry.get('payload', {})
+                        
+                        webhook_url = cls.get_webhook_url(event_type)
+                        if webhook_url:
+                            success = cls._send_webhook(
+                                webhook_url, payload, event_type,
+                                payload.get('idempotency_key')
+                            )
+                            if success:
+                                processed += 1
+                                entry['status'] = 'sent'
+                            else:
+                                remaining.append(entry)
+                except:
+                    pass
+        
+        # Reescribir cola con elementos restantes
+        with open(QUEUE_FILE, 'w', encoding='utf-8') as f:
+            for entry in remaining:
+                f.write(json.dumps(entry, ensure_ascii=False) + '\n')
+        
+        if processed > 0:
+            log_pass(f"Procesados {processed} eventos de la cola")
+        
+        return processed
 
+
+# =============================================================================
+# CLI
+# =============================================================================
 
 def configure_webhooks():
     """CLI para configurar webhooks."""
@@ -377,11 +586,13 @@ def configure_webhooks():
 
 def main():
     if len(sys.argv) < 2:
-        print("Uso: python event_dispatcher.py [configure | test | status]")
+        print("Uso: python event_dispatcher.py [configure | test | status | healthcheck | process-queue]")
         print("\nComandos:")
-        print("  configure  Configurar URLs de webhooks")
-        print("  test       Enviar evento de prueba")
-        print("  status     Ver estado de configuracion")
+        print("  configure      Configurar URLs de webhooks")
+        print("  test           Enviar evento de prueba")
+        print("  status         Ver estado de configuracion")
+        print("  healthcheck    Verificar disponibilidad de n8n")
+        print("  process-queue  Procesar eventos encolados")
         return
     
     cmd = sys.argv[1]
@@ -399,7 +610,7 @@ def main():
             "message": "Evento de prueba AGCCE"
         }, force=True, async_mode=False)
         
-        print(f"Resultado: {'OK' if success else 'FAILED'}")
+        print(f"Resultado: {'OK' if success else 'FAILED (encolado localmente)'}")
     
     elif cmd == "status":
         config = load_webhook_config()
@@ -410,6 +621,16 @@ def main():
             status = "Configurado" if url else "No configurado"
             icon = Symbols.CHECK if url else Symbols.CROSS
             print(f"{icon} {event}: {status}")
+    
+    elif cmd == "healthcheck":
+        print("=== Healthcheck n8n ===\n")
+        available = EventDispatcher.healthcheck()
+        print(f"\nResultado: {'n8n DISPONIBLE' if available else 'n8n NO DISPONIBLE'}")
+    
+    elif cmd == "process-queue":
+        print("=== Procesando cola local ===\n")
+        processed = EventDispatcher.process_queue()
+        print(f"\nEventos procesados: {processed}")
     
     else:
         print(f"Comando desconocido: {cmd}")
