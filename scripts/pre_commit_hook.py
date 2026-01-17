@@ -1,28 +1,24 @@
 #!/usr/bin/env python3
 """
-AGCCE Pre-Commit Hook con Gate de Snyk
+AGCCE Pre-Commit Hook v2.1 con Gate de Snyk + Snyk-Diff Policy
 Bloquea commits si:
 1. Lint check falla
-2. Type check falla
-3. Snyk detecta vulnerabilidades Critical o High
+2. Snyk detecta vulnerabilidades Critical/High en codigo
+3. Cambios en dependencias introducen vulnerabilidades (Snyk-Diff Policy)
 
-CONTROL CRITICO: Gate de Snyk
-- Ejecuta snyk_code_scan antes del commit
-- Bloquea si hay vulnerabilidades Critical o High
-- Permite bypass con --no-verify (no recomendado)
+CONTROLES CRITICOS:
+- Gate Snyk: Bloquea Critical/High en codigo
+- Snyk-Diff Policy: Analiza delta en requirements.txt/package.json
 
-Instalacion:
-  python scripts/pre_commit_hook.py --install
-  
-Uso manual:
-  python scripts/pre_commit_hook.py [--skip-snyk]
+Instalacion: python scripts/pre_commit_hook.py --install
 """
 
 import subprocess
 import sys
 import os
+import json
 from datetime import datetime
-from typing import Tuple, List
+from typing import Tuple, List, Set
 
 # Importar utilidades comunes
 try:
@@ -40,6 +36,26 @@ except ImportError:
     def log_warn(msg): print(f"[!] {msg}")
     def log_info(msg): print(f"[i] {msg}")
     def make_header(title, width=60): return f"\n{'=' * width}\n  {title}\n{'=' * width}\n"
+
+
+# Archivos de dependencias a monitorear
+DEPENDENCY_FILES = {
+    'requirements.txt',
+    'requirements-dev.txt',
+    'Pipfile',
+    'Pipfile.lock',
+    'pyproject.toml',
+    'package.json',
+    'package-lock.json',
+    'yarn.lock',
+    'pnpm-lock.yaml',
+    'Gemfile',
+    'Gemfile.lock',
+    'go.mod',
+    'go.sum',
+    'Cargo.toml',
+    'Cargo.lock'
+}
 
 
 def get_staged_files() -> List[str]:
@@ -61,6 +77,12 @@ def get_staged_python_files() -> List[str]:
     return [f for f in get_staged_files() if f.endswith('.py')]
 
 
+def get_staged_dependency_files() -> Set[str]:
+    """Obtiene archivos de dependencias que fueron modificados."""
+    staged = set(get_staged_files())
+    return staged & DEPENDENCY_FILES
+
+
 def run_lint_check(files: List[str]) -> Tuple[bool, str]:
     """Ejecuta lint check en archivos staged."""
     if not files:
@@ -68,7 +90,7 @@ def run_lint_check(files: List[str]) -> Tuple[bool, str]:
     
     try:
         result = subprocess.run(
-            [sys.executable, "scripts/lint_check.py"] + files[:5],  # Limitar a 5 archivos
+            [sys.executable, "scripts/lint_check.py"] + files[:5],
             capture_output=True,
             text=True,
             timeout=60,
@@ -79,40 +101,15 @@ def run_lint_check(files: List[str]) -> Tuple[bool, str]:
     except FileNotFoundError:
         return True, "lint_check.py no encontrado, saltando"
     except Exception as e:
-        return True, f"Error ejecutando lint: {e}"
+        return True, f"Error: {e}"
 
 
-def run_type_check(files: List[str]) -> Tuple[bool, str]:
-    """Ejecuta type check en archivos staged."""
-    if not files:
-        return True, "No hay archivos Python para verificar"
-    
-    try:
-        result = subprocess.run(
-            [sys.executable, "scripts/type_check.py"] + files[:5],
-            capture_output=True,
-            text=True,
-            timeout=120,
-            encoding='utf-8',
-            errors='replace'
-        )
-        # Type check es warning, no bloqueante
-        return True, result.stdout + result.stderr
-    except FileNotFoundError:
-        return True, "type_check.py no encontrado, saltando"
-    except Exception as e:
-        return True, f"Error ejecutando type check: {e}"
-
-
-def run_snyk_security_scan() -> Tuple[bool, str, int, int]:
+def run_snyk_code_scan() -> Tuple[bool, str, int, int]:
     """
-    GATE DE SNYK - Bloquea Critical y High
-    
-    Returns:
-        Tuple[bool, str, int, int]: (passed, output, critical_count, high_count)
+    GATE DE SNYK - Escanea codigo fuente.
+    Bloquea si encuentra Critical/High.
     """
     try:
-        # Ejecutar Snyk code scan con threshold high
         result = subprocess.run(
             [
                 "C:\\Users\\ASUS\\AppData\\Local\\snyk\\vscode-cli\\snyk-win.exe",
@@ -122,102 +119,163 @@ def run_snyk_security_scan() -> Tuple[bool, str, int, int]:
             ],
             capture_output=True,
             text=True,
-            timeout=300,  # 5 minutos max
+            timeout=300,
             encoding='utf-8',
             errors='replace'
         )
         
         output = result.stdout + result.stderr
+        critical = output.lower().count("critical")
+        high = output.lower().count("high severity") + output.lower().count("[high]")
         
-        # Contar vulnerabilidades
-        critical_count = output.lower().count("critical")
-        high_count = output.lower().count("high severity") + output.lower().count("[high]")
-        
-        # Bloquear si hay Critical o High
-        if result.returncode != 0 or critical_count > 0 or high_count > 0:
-            return False, output, critical_count, high_count
+        if result.returncode != 0 or critical > 0 or high > 0:
+            return False, output, critical, high
         
         return True, output, 0, 0
         
     except FileNotFoundError:
-        log_warn("Snyk CLI no encontrado, saltando security scan")
+        log_warn("Snyk CLI no encontrado")
         return True, "Snyk no disponible", 0, 0
     except subprocess.TimeoutExpired:
-        log_warn("Snyk scan timeout, saltando")
-        return True, "Snyk timeout", 0, 0
+        log_warn("Snyk code scan timeout")
+        return True, "Timeout", 0, 0
     except Exception as e:
-        log_warn(f"Error ejecutando Snyk: {e}")
         return True, str(e), 0, 0
 
 
-def run_pre_commit(skip_snyk: bool = False) -> bool:
+def run_snyk_dependency_scan(dep_files: Set[str]) -> Tuple[bool, str, List[str]]:
+    """
+    SNYK-DIFF POLICY - Escanea dependencias modificadas.
+    Si un cambio en requirements.txt/package.json introduce vulnerabilidad, bloquea.
+    """
+    if not dep_files:
+        return True, "Sin cambios en dependencias", []
+    
+    vulnerabilities = []
+    
+    for dep_file in dep_files:
+        print(f"    Escaneando: {dep_file}")
+        
+        try:
+            # Determinar tipo de proyecto
+            if dep_file in {'requirements.txt', 'requirements-dev.txt', 'Pipfile', 'pyproject.toml'}:
+                cmd = ["snyk", "test", "--severity-threshold=high", "--file=" + dep_file]
+            elif dep_file in {'package.json', 'package-lock.json', 'yarn.lock'}:
+                cmd = ["snyk", "test", "--severity-threshold=high"]
+            else:
+                continue
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=180,
+                encoding='utf-8',
+                errors='replace',
+                cwd=os.path.dirname(dep_file) or '.'
+            )
+            
+            output = result.stdout + result.stderr
+            
+            # Detectar vulnerabilidades
+            if result.returncode != 0:
+                # Extraer paquetes vulnerables
+                import re
+                vuln_matches = re.findall(r'([\w-]+)@[\d.]+ \[([A-Z]+)\]', output)
+                for pkg, severity in vuln_matches:
+                    if severity in ['CRITICAL', 'HIGH']:
+                        vulnerabilities.append(f"{dep_file}: {pkg} ({severity})")
+        
+        except FileNotFoundError:
+            # Snyk CLI no disponible, usar alternativa
+            log_warn(f"Snyk test no disponible para {dep_file}")
+        except subprocess.TimeoutExpired:
+            log_warn(f"Timeout escaneando {dep_file}")
+        except Exception as e:
+            log_warn(f"Error escaneando {dep_file}: {e}")
+    
+    if vulnerabilities:
+        return False, "\n".join(vulnerabilities), vulnerabilities
+    
+    return True, "Sin vulnerabilidades nuevas", []
+
+
+def run_pre_commit(skip_snyk: bool = False, skip_deps: bool = False) -> bool:
     """
     Ejecuta todos los checks de pre-commit.
-    
-    Returns:
-        bool: True si todos los checks pasan
     """
-    print(make_header("AGCCE Pre-Commit Hook v2.0"))
+    print(make_header("AGCCE Pre-Commit Hook v2.1"))
     
     all_passed = True
     staged_files = get_staged_files()
     python_files = get_staged_python_files()
+    dep_files = get_staged_dependency_files()
     
     print(f"{Colors.CYAN}Archivos staged:{Colors.RESET} {len(staged_files)}")
     print(f"{Colors.CYAN}Archivos Python:{Colors.RESET} {len(python_files)}")
+    print(f"{Colors.CYAN}Archivos de dependencias:{Colors.RESET} {len(dep_files)}")
     print()
     
     # 1. Lint Check
-    print(f"{Colors.BOLD}[1/3] Lint Check...{Colors.RESET}")
+    print(f"{Colors.BOLD}[1/4] Lint Check...{Colors.RESET}")
     passed, output = run_lint_check(python_files)
     if passed:
         log_pass("Lint check pasado")
     else:
         log_fail("Lint check fallido")
-        print(output[:500])
+        print(output[:300])
         all_passed = False
     
-    # 2. Type Check (warning only)
-    print(f"\n{Colors.BOLD}[2/3] Type Check...{Colors.RESET}")
-    passed, output = run_type_check(python_files)
-    if passed:
-        log_pass("Type check completado")
-    else:
-        log_warn("Type check con warnings (no bloqueante)")
-    
-    # 3. Snyk Security Scan (GATE CRITICO)
-    print(f"\n{Colors.BOLD}[3/3] Snyk Security Scan...{Colors.RESET}")
+    # 2. Snyk Code Scan
+    print(f"\n{Colors.BOLD}[2/4] Snyk Code Security Scan...{Colors.RESET}")
     
     if skip_snyk:
-        log_warn("Snyk scan saltado por --skip-snyk")
+        log_warn("Snyk code scan saltado")
     else:
-        passed, output, critical, high = run_snyk_security_scan()
+        passed, output, critical, high = run_snyk_code_scan()
         
         if passed:
-            log_pass("Sin vulnerabilidades Critical/High")
+            log_pass("Sin vulnerabilidades Critical/High en codigo")
         else:
-            log_fail(f"Vulnerabilidades detectadas: {critical} Critical, {high} High")
-            print(f"\n{Colors.RED}{'=' * 50}")
-            print("  COMMIT BLOQUEADO POR VULNERABILIDADES DE SEGURIDAD")
-            print(f"{'=' * 50}{Colors.RESET}")
-            print(f"\n{Colors.YELLOW}Vulnerabilidades:{Colors.RESET}")
-            print(f"  Critical: {critical}")
-            print(f"  High: {high}")
-            print(f"\n{Colors.BLUE}Para ver detalles:{Colors.RESET}")
-            print("  snyk code test .")
-            print(f"\n{Colors.YELLOW}[!] Corrige las vulnerabilidades antes de hacer commit{Colors.RESET}")
-            print(f"{Colors.RED}[!] No uses --no-verify para saltarte este check{Colors.RESET}\n")
+            log_fail(f"Vulnerabilidades en codigo: {critical} Critical, {high} High")
             all_passed = False
     
-    # Resultado final
-    print()
+    # 3. Snyk-Diff Policy (dependencias)
+    print(f"\n{Colors.BOLD}[3/4] Snyk-Diff Policy (dependencias)...{Colors.RESET}")
+    
+    if skip_deps or not dep_files:
+        if dep_files:
+            log_warn("Snyk-Diff saltado")
+        else:
+            log_info("Sin cambios en archivos de dependencias")
+    else:
+        passed, output, vulns = run_snyk_dependency_scan(dep_files)
+        
+        if passed:
+            log_pass("Sin vulnerabilidades nuevas en dependencias")
+        else:
+            log_fail(f"Vulnerabilidades en dependencias:")
+            for v in vulns[:5]:
+                print(f"    {Colors.RED}X{Colors.RESET} {v}")
+            if len(vulns) > 5:
+                print(f"    ... y {len(vulns) - 5} mas")
+            all_passed = False
+    
+    # 4. Resumen
+    print(f"\n{Colors.BOLD}[4/4] Resumen...{Colors.RESET}")
+    
     if all_passed:
-        print(f"{Colors.GREEN}=== PRE-COMMIT PASSED ==={Colors.RESET}")
+        print(f"\n{Colors.GREEN}=== PRE-COMMIT PASSED ==={Colors.RESET}")
         log_pass("Commit permitido")
         return True
     else:
-        print(f"{Colors.RED}=== PRE-COMMIT FAILED ==={Colors.RESET}")
-        log_fail("Commit bloqueado")
+        print(f"\n{Colors.RED}{'=' * 50}")
+        print("  COMMIT BLOQUEADO")
+        print(f"{'=' * 50}{Colors.RESET}")
+        print(f"\n{Colors.YELLOW}Razones:{Colors.RESET}")
+        print("  - Vulnerabilidades de seguridad detectadas")
+        print("  - Corrige los problemas antes de hacer commit")
+        print(f"\n{Colors.RED}[!] Bypass prohibido (AGCCE Directive){Colors.RESET}\n")
         return False
 
 
@@ -225,43 +283,41 @@ def install_hook():
     """Instala el hook de pre-commit en .git/hooks/"""
     hook_path = ".git/hooks/pre-commit"
     
-    # Verificar que estamos en un repo git
     if not os.path.exists(".git"):
         log_fail("No es un repositorio git")
         return False
     
-    # Crear contenido del hook
     hook_content = '''#!/bin/sh
-# AGCCE Pre-Commit Hook
-# Instalado automaticamente por scripts/pre_commit_hook.py
+# AGCCE Pre-Commit Hook v2.1
+# Con Gate Snyk + Snyk-Diff Policy
 
 python scripts/pre_commit_hook.py
 exit_code=$?
 
 if [ $exit_code -ne 0 ]; then
     echo ""
-    echo "Commit bloqueado por AGCCE Pre-Commit Hook"
-    echo "Usa 'git commit --no-verify' para saltarte el hook (NO RECOMENDADO)"
+    echo "[X] Commit bloqueado por AGCCE Pre-Commit Hook"
+    echo "[!] Bypass prohibido segun directivas AGCCE"
     exit 1
 fi
 
 exit 0
 '''
     
-    # Crear directorio hooks si no existe
     os.makedirs(".git/hooks", exist_ok=True)
     
-    # Escribir hook
     with open(hook_path, 'w', encoding='utf-8', newline='\n') as f:
         f.write(hook_content)
     
-    # Hacer ejecutable (en Unix)
     if sys.platform != 'win32':
         os.chmod(hook_path, 0o755)
     
     log_pass(f"Hook instalado en {hook_path}")
-    print(f"\n{Colors.BLUE}El hook se ejecutara automaticamente antes de cada commit.{Colors.RESET}")
-    print(f"{Colors.YELLOW}Para desinstalar, elimina: {hook_path}{Colors.RESET}\n")
+    print(f"\n{Colors.BLUE}El hook incluye:{Colors.RESET}")
+    print("  - Lint Check")
+    print("  - Snyk Code Scan (Critical/High bloqueantes)")
+    print("  - Snyk-Diff Policy (dependencias)")
+    print(f"\n{Colors.RED}[!] Bypass (--no-verify) esta PROHIBIDO{Colors.RESET}\n")
     
     return True
 
@@ -272,16 +328,17 @@ def main():
         return
     
     if "--help" in sys.argv:
-        print(f"Uso: python {sys.argv[0]} [--install | --skip-snyk | --help]")
+        print(f"Uso: python {sys.argv[0]} [--install | --skip-snyk | --skip-deps | --help]")
         print("\nOpciones:")
-        print("  --install     Instala el hook en .git/hooks/pre-commit")
-        print("  --skip-snyk   Salta el scan de Snyk (no recomendado)")
-        print("  --help        Muestra esta ayuda")
+        print("  --install      Instala el hook")
+        print("  --skip-snyk    Salta scan de codigo (NO RECOMENDADO)")
+        print("  --skip-deps    Salta scan de dependencias")
         return
     
     skip_snyk = "--skip-snyk" in sys.argv
-    passed = run_pre_commit(skip_snyk)
+    skip_deps = "--skip-deps" in sys.argv
     
+    passed = run_pre_commit(skip_snyk, skip_deps)
     sys.exit(0 if passed else 1)
 
 

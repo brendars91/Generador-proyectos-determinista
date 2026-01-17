@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
-AGCCE Plan Generator con Self-Correction Loop
+AGCCE Plan Generator v2.1 con Self-Correction Loop + Semantic Verification
 Genera planes JSON automaticamente usando IA con validacion integrada.
 
-CONTROL CRITICO: Self-Correction Loop
-- Genera plan con AI
-- Valida internamente con validate_plan.py
-- Si falla: reintenta hasta 3 veces
-- Si sigue fallando: pide ayuda humana
+CONTROLES CRITICOS:
+1. Self-Correction Loop: Reintenta hasta 3 veces
+2. Semantic Verification: Valida que targets existan en el indice RAG
+3. Traceback Feedback: Usa errores como input para correccion
 
 Uso: python plan_generator.py --objective "Descripcion de la tarea"
 """
@@ -43,6 +42,7 @@ except ImportError:
 # Configuracion
 MAX_RETRIES = 3
 PLANS_DIR = "plans"
+INDEX_STATE_FILE = ".rag_index_state.json"
 
 
 def generate_plan_id() -> str:
@@ -52,13 +52,84 @@ def generate_plan_id() -> str:
     return f"PLAN-{random_part}"
 
 
-def validate_plan_internal(plan_path: str) -> Tuple[bool, str]:
+def load_indexed_files() -> List[str]:
+    """Carga lista de archivos indexados por RAG."""
+    if os.path.exists(INDEX_STATE_FILE):
+        try:
+            with open(INDEX_STATE_FILE, 'r', encoding='utf-8') as f:
+                state = json.load(f)
+                return state.get('indexed_files', [])
+        except:
+            pass
+    return []
+
+
+def get_existing_files() -> set:
+    """Obtiene set de archivos existentes en el proyecto."""
+    existing = set()
+    exclude_dirs = {'.git', '__pycache__', 'node_modules', '.venv', 'venv'}
+    
+    for root, dirs, files in os.walk('.'):
+        dirs[:] = [d for d in dirs if d not in exclude_dirs]
+        for f in files:
+            path = os.path.join(root, f).replace('\\', '/')
+            if path.startswith('./'):
+                path = path[2:]
+            existing.add(path)
+    
+    return existing
+
+
+def validate_semantic_existence(plan: Dict) -> Tuple[bool, List[str]]:
     """
-    Valida el plan usando validate_plan.py internamente.
+    SEMANTIC VERIFICATION - Anti-Alucinacion
+    
+    Valida que todos los targets/paths mencionados en el plan
+    existan realmente en el filesystem o indice RAG.
     
     Returns:
-        Tuple[bool, str]: (success, error_message)
+        Tuple[bool, List[str]]: (passed, hallucinated_paths)
     """
+    existing_files = get_existing_files()
+    indexed_files = set(load_indexed_files())
+    all_known = existing_files | indexed_files
+    
+    hallucinated = []
+    
+    # Verificar affected_files
+    for path in plan.get('objective', {}).get('affected_files', []):
+        normalized = path.replace('\\', '/').lstrip('./')
+        if normalized and normalized != '.' and normalized not in all_known:
+            # Verificar si existe realmente en filesystem
+            if not os.path.exists(path):
+                hallucinated.append(f"affected_files: {path}")
+    
+    # Verificar targets en steps
+    for step in plan.get('steps', []):
+        target = step.get('target', '')
+        action = step.get('action', '')
+        
+        # Solo verificar para acciones de lectura/modificacion de archivos
+        if action in ['read_file', 'write_file', 'delete_file']:
+            normalized = target.replace('\\', '/').lstrip('./')
+            if normalized and normalized != '.' and normalized not in all_known:
+                if not os.path.exists(target):
+                    # Para write_file, el archivo puede no existir aun (sera creado)
+                    if action != 'write_file':
+                        hallucinated.append(f"step {step.get('id')}: {target}")
+    
+    # Verificar analyzed_paths en evidence
+    for path in plan.get('evidence', {}).get('analyzed_paths', []):
+        normalized = path.replace('\\', '/').lstrip('./')
+        if normalized and normalized != '.' and normalized not in all_known:
+            if not os.path.exists(path):
+                hallucinated.append(f"evidence: {path}")
+    
+    return len(hallucinated) == 0, hallucinated
+
+
+def validate_plan_internal(plan_path: str) -> Tuple[bool, str]:
+    """Valida el plan usando validate_plan.py internamente."""
     try:
         result = subprocess.run(
             [sys.executable, "scripts/validate_plan.py", plan_path],
@@ -74,7 +145,10 @@ def validate_plan_internal(plan_path: str) -> Tuple[bool, str]:
 
 
 def analyze_validation_errors(error_output: str) -> List[str]:
-    """Analiza errores de validacion para corregir."""
+    """
+    Analiza errores de validacion para corregir.
+    MEJORA: Usa el Traceback como feedback para correccion.
+    """
     errors = []
     
     # Patrones de errores comunes
@@ -86,20 +160,25 @@ def analyze_validation_errors(error_output: str) -> List[str]:
         (r"falta 'target'", "missing_target"),
         (r"hitl_required=true", "hitl_required"),
         (r"dependencia '(\w+)' no existe", "dependency"),
+        (r"Traceback", "traceback_error"),
     ]
     
     for pattern, error_type in patterns:
         if re.search(pattern, error_output, re.IGNORECASE):
             errors.append(error_type)
     
+    # Extraer contexto del traceback para feedback
+    if "traceback_error" in errors:
+        # Guardar traceback para analisis
+        errors.append(f"traceback_context:{error_output[-500:]}")
+    
     return errors
 
 
-def fix_plan(plan: Dict, errors: List[str]) -> Dict:
+def fix_plan(plan: Dict, errors: List[str], hallucinated: List[str] = None) -> Dict:
     """
     Intenta corregir errores comunes en el plan.
-    
-    Esta funcion aplica correcciones automaticas basadas en errores detectados.
+    MEJORA: Corrige alucinaciones de entidad.
     """
     # Fix plan_id si es invalido
     if "plan_id" in errors or not re.match(r'^PLAN-[A-Z0-9]{8}$', plan.get('plan_id', '')):
@@ -114,7 +193,7 @@ def fix_plan(plan: Dict, errors: List[str]) -> Dict:
     if "missing_action" in errors:
         for step in plan.get('steps', []):
             if 'action' not in step:
-                step['action'] = 'read_file'  # Default seguro
+                step['action'] = 'read_file'
     
     # Fix invalid actions
     valid_actions = [
@@ -130,7 +209,7 @@ def fix_plan(plan: Dict, errors: List[str]) -> Dict:
     if "missing_target" in errors:
         for step in plan.get('steps', []):
             if 'target' not in step:
-                step['target'] = '.'  # Default al directorio actual
+                step['target'] = '.'
     
     # Fix HITL required
     if "hitl_required" in errors:
@@ -138,6 +217,29 @@ def fix_plan(plan: Dict, errors: List[str]) -> Dict:
         for step in plan.get('steps', []):
             if step.get('action') in write_actions:
                 step['hitl_required'] = True
+    
+    # FIX ALUCINACIONES: Remover paths inexistentes
+    if hallucinated:
+        existing = get_existing_files()
+        
+        # Limpiar affected_files
+        affected = plan.get('objective', {}).get('affected_files', [])
+        plan['objective']['affected_files'] = [
+            f for f in affected if os.path.exists(f) or f in existing
+        ]
+        
+        # Limpiar analyzed_paths
+        analyzed = plan.get('evidence', {}).get('analyzed_paths', [])
+        plan['evidence']['analyzed_paths'] = [
+            f for f in analyzed if os.path.exists(f) or f in existing
+        ]
+        
+        # Corregir targets en steps
+        for step in plan.get('steps', []):
+            if step.get('action') == 'read_file':
+                target = step.get('target', '')
+                if not os.path.exists(target) and target != '.':
+                    step['target'] = '.'  # Fallback seguro
     
     # Asegurar campos requeridos
     if 'version' not in plan:
@@ -153,6 +255,9 @@ def create_plan_template(objective: str, affected_files: List[str] = None) -> Di
     if affected_files is None:
         affected_files = []
     
+    # Filtrar solo archivos que existen (anti-alucinacion)
+    existing_files = [f for f in affected_files if os.path.exists(f)]
+    
     plan = {
         "plan_id": generate_plan_id(),
         "version": "1.1",
@@ -164,7 +269,7 @@ def create_plan_template(objective: str, affected_files: List[str] = None) -> Di
                 "Tests pasando",
                 "Sin errores de lint"
             ],
-            "affected_files": affected_files
+            "affected_files": existing_files
         },
         "pre_flight_check": {
             "git_status": "clean",
@@ -175,7 +280,7 @@ def create_plan_template(objective: str, affected_files: List[str] = None) -> Di
             {
                 "id": "S01",
                 "action": "read_file",
-                "target": affected_files[0] if affected_files else ".",
+                "target": existing_files[0] if existing_files else ".",
                 "expected_outcome": "Entender estructura actual",
                 "hitl_required": False
             },
@@ -198,7 +303,7 @@ def create_plan_template(objective: str, affected_files: List[str] = None) -> Di
         },
         "evidence": {
             "logs": [],
-            "analyzed_paths": affected_files
+            "analyzed_paths": existing_files
         },
         "commit_proposal": {
             "type": "feat",
@@ -216,20 +321,20 @@ def generate_plan_with_self_correction(
     context: str = None
 ) -> Tuple[bool, str, Dict]:
     """
-    SELF-CORRECTION LOOP
+    SELF-CORRECTION LOOP v2.1
     
-    Genera un plan y lo valida internamente.
-    Si falla, corrige y reintenta hasta MAX_RETRIES veces.
-    
-    Returns:
-        Tuple[bool, str, Dict]: (success, plan_path, plan_data)
+    1. Genera plan
+    2. Valida estructura (JSON Schema)
+    3. Valida semantica (paths existen - anti-alucinacion)
+    4. Si falla: corrige y reintenta hasta MAX_RETRIES
+    5. Si sigue fallando: solicita ayuda humana
     """
-    print(make_header("AGCCE Plan Generator v2.0"))
+    print(make_header("AGCCE Plan Generator v2.1"))
     print(f"{Colors.CYAN}Objetivo:{Colors.RESET} {objective}")
     print(f"{Colors.CYAN}Max reintentos:{Colors.RESET} {MAX_RETRIES}")
+    print(f"{Colors.CYAN}Verificacion semantica:{Colors.RESET} Activada")
     print()
     
-    # Crear directorio de planes si no existe
     os.makedirs(PLANS_DIR, exist_ok=True)
     
     # Generar plan inicial
@@ -239,56 +344,67 @@ def generate_plan_with_self_correction(
     # Self-Correction Loop
     for attempt in range(MAX_RETRIES):
         attempt_num = attempt + 1
-        print(f"\n{Colors.BOLD}[Intento {attempt_num}/{MAX_RETRIES}] Validando plan...{Colors.RESET}")
+        print(f"\n{Colors.BOLD}[Intento {attempt_num}/{MAX_RETRIES}]{Colors.RESET}")
         
         # Guardar plan temporal
         temp_path = os.path.join(PLANS_DIR, f"_temp_plan_{attempt_num}.json")
         with open(temp_path, 'w', encoding='utf-8') as f:
             json.dump(plan, f, indent=2, ensure_ascii=False)
         
-        # Validar
-        success, output = validate_plan_internal(temp_path)
+        # PASO 1: Validacion de estructura
+        print(f"  [1/2] Validando estructura...")
+        struct_valid, struct_output = validate_plan_internal(temp_path)
         
-        if success:
-            # Plan valido - guardar version final
-            final_path = os.path.join(PLANS_DIR, f"{plan['plan_id']}.json")
-            with open(final_path, 'w', encoding='utf-8') as f:
-                json.dump(plan, f, indent=2, ensure_ascii=False)
-            
-            # Limpiar temporal
-            try:
-                os.remove(temp_path)
-            except:
-                pass
-            
-            log_pass(f"Plan generado exitosamente en intento {attempt_num}")
-            print(f"\n{Colors.GREEN}=== PLAN GENERATION SUCCESSFUL ==={Colors.RESET}")
-            print(f"\n{Colors.BLUE}Plan guardado en:{Colors.RESET} {final_path}\n")
-            
-            return True, final_path, plan
-        
-        else:
-            log_warn(f"Validacion fallida en intento {attempt_num}")
-            
-            # Analizar errores
-            errors = analyze_validation_errors(output)
-            print(f"  Errores detectados: {errors}")
-            
-            # Intentar corregir
-            print(f"  Aplicando correcciones automaticas...")
+        if not struct_valid:
+            log_warn("Estructura invalida")
+            errors = analyze_validation_errors(struct_output)
+            print(f"    Errores: {[e for e in errors if not e.startswith('traceback')]}")
             plan = fix_plan(plan, errors)
-            
-            # Limpiar temporal
             try:
                 os.remove(temp_path)
             except:
                 pass
+            continue
+        
+        print(f"    {Colors.GREEN}{Symbols.CHECK}{Colors.RESET} Estructura valida")
+        
+        # PASO 2: Validacion semantica (anti-alucinacion)
+        print(f"  [2/2] Validando semantica (anti-alucinacion)...")
+        semantic_valid, hallucinated = validate_semantic_existence(plan)
+        
+        if not semantic_valid:
+            log_warn(f"Alucinacion detectada: {len(hallucinated)} paths inexistentes")
+            for h in hallucinated[:5]:
+                print(f"    {Colors.RED}X{Colors.RESET} {h}")
+            plan = fix_plan(plan, ["hallucination"], hallucinated)
+            try:
+                os.remove(temp_path)
+            except:
+                pass
+            continue
+        
+        print(f"    {Colors.GREEN}{Symbols.CHECK}{Colors.RESET} Sin alucinaciones")
+        
+        # PLAN VALIDO
+        final_path = os.path.join(PLANS_DIR, f"{plan['plan_id']}.json")
+        with open(final_path, 'w', encoding='utf-8') as f:
+            json.dump(plan, f, indent=2, ensure_ascii=False)
+        
+        try:
+            os.remove(temp_path)
+        except:
+            pass
+        
+        log_pass(f"Plan generado exitosamente en intento {attempt_num}")
+        print(f"\n{Colors.GREEN}=== PLAN GENERATION SUCCESSFUL ==={Colors.RESET}")
+        print(f"\n{Colors.BLUE}Plan guardado en:{Colors.RESET} {final_path}\n")
+        
+        return True, final_path, plan
     
-    # Fallaron todos los intentos - pedir ayuda humana
+    # Fallaron todos los intentos
     print(f"\n{Colors.RED}=== SELF-CORRECTION FAILED ==={Colors.RESET}")
     log_fail(f"No se pudo generar plan valido despues de {MAX_RETRIES} intentos")
     
-    # Guardar ultimo intento para revision humana
     failed_path = os.path.join(PLANS_DIR, f"_FAILED_{plan['plan_id']}.json")
     with open(failed_path, 'w', encoding='utf-8') as f:
         json.dump(plan, f, indent=2, ensure_ascii=False)
@@ -308,7 +424,6 @@ def main():
         print(f"  --files f1,f2,f3     Archivos afectados (opcional)")
         sys.exit(1)
     
-    # Parsear argumentos
     objective = None
     affected_files = []
     
@@ -327,7 +442,6 @@ def main():
         print(f"{Colors.RED}Error: --objective es requerido{Colors.RESET}")
         sys.exit(1)
     
-    # Generar plan con Self-Correction Loop
     success, path, plan = generate_plan_with_self_correction(objective, affected_files)
     
     sys.exit(0 if success else 1)
