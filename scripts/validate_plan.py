@@ -9,30 +9,28 @@ Uso: python validate_plan.py <plan.json>
 import json
 import sys
 import os
+import re
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Tuple, Any
 
-# Colores para output
-class Colors:
-    GREEN = '\033[92m'
-    RED = '\033[91m'
-    YELLOW = '\033[93m'
-    BLUE = '\033[94m'
-    RESET = '\033[0m'
-    BOLD = '\033[1m'
-
-def log_pass(msg: str) -> None:
-    print(f"{Colors.GREEN}✓ PASS:{Colors.RESET} {msg}")
-
-def log_fail(msg: str) -> None:
-    print(f"{Colors.RED}✗ FAIL:{Colors.RESET} {msg}")
-
-def log_warn(msg: str) -> None:
-    print(f"{Colors.YELLOW}⚠ WARN:{Colors.RESET} {msg}")
-
-def log_info(msg: str) -> None:
-    print(f"{Colors.BLUE}ℹ INFO:{Colors.RESET} {msg}")
+# Importar utilidades comunes (con fix de encoding)
+try:
+    from common import Colors, Symbols, log_pass, log_fail, log_warn, log_info, make_header
+except ImportError:
+    # Fallback si no encuentra common.py
+    class Colors:
+        GREEN = RED = YELLOW = BLUE = RESET = BOLD = ''
+    class Symbols:
+        CHECK = '[OK]'
+        CROSS = '[X]'
+        WARN = '[!]'
+        INFO = '[i]'
+    def log_pass(msg): print(f"{Symbols.CHECK} PASS: {msg}")
+    def log_fail(msg): print(f"{Symbols.CROSS} FAIL: {msg}")
+    def log_warn(msg): print(f"{Symbols.WARN} WARN: {msg}")
+    def log_info(msg): print(f"{Symbols.INFO} INFO: {msg}")
+    def make_header(title, width=60): return f"\n{'=' * width}\n  {title}\n{'=' * width}\n"
 
 
 def load_plan(path: str) -> Dict[str, Any]:
@@ -58,9 +56,8 @@ def validate_plan_id(plan: Dict) -> List[str]:
     errors = []
     plan_id = plan.get('plan_id', '')
     
-    import re
     if not re.match(r'^PLAN-[A-Z0-9]{8}$', plan_id):
-        errors.append(f"plan_id inválido: '{plan_id}'. Formato esperado: PLAN-XXXXXXXX")
+        errors.append(f"plan_id invalido: '{plan_id}'. Formato esperado: PLAN-XXXXXXXX")
     
     return errors
 
@@ -81,13 +78,12 @@ def validate_steps(plan: Dict) -> List[str]:
         'lint_check', 'type_check', 'snyk_scan', 'git_commit'
     ]
     
-    import re
     for i, step in enumerate(steps):
         step_id = step.get('id', '')
         
         # Validar formato de ID
         if not re.match(r'^S[0-9]{2}$', step_id):
-            errors.append(f"Paso {i+1}: ID inválido '{step_id}'. Formato: S01, S02, etc.")
+            errors.append(f"Paso {i+1}: ID invalido '{step_id}'. Formato: S01, S02, etc.")
         
         # Validar unicidad
         if step_id in seen_ids:
@@ -98,7 +94,7 @@ def validate_steps(plan: Dict) -> List[str]:
         if 'action' not in step:
             errors.append(f"Paso {step_id}: falta 'action'")
         elif step['action'] not in valid_actions:
-            errors.append(f"Paso {step_id}: acción inválida '{step['action']}'")
+            errors.append(f"Paso {step_id}: accion invalida '{step['action']}'")
         
         if 'target' not in step:
             errors.append(f"Paso {step_id}: falta 'target'")
@@ -106,7 +102,7 @@ def validate_steps(plan: Dict) -> List[str]:
         # Validar HITL para acciones de escritura
         if step.get('action') in ['write_file', 'delete_file']:
             if not step.get('hitl_required', False):
-                errors.append(f"Paso {step_id}: acción '{step['action']}' requiere hitl_required=true")
+                errors.append(f"Paso {step_id}: accion '{step['action']}' requiere hitl_required=true")
     
     return errors
 
@@ -160,8 +156,8 @@ def validate_docker_mapping(plan: Dict) -> List[str]:
         if step.get('action') in docker_actions:
             if not step.get('script'):
                 errors.append(
-                    f"Paso {step.get('id')}: acción Docker '{step.get('action')}' "
-                    f"requiere campo 'script' (Directiva v1.1.0 §1)"
+                    f"Paso {step.get('id')}: accion Docker '{step.get('action')}' "
+                    f"requiere campo 'script' (Directiva v1.1.0)"
                 )
     
     return errors
@@ -175,7 +171,7 @@ def run_validation(plan_path: str) -> Tuple[bool, List[str], List[str]]:
     try:
         plan = load_plan(plan_path)
     except json.JSONDecodeError as e:
-        return False, [f"JSON inválido: {e}"], []
+        return False, [f"JSON invalido: {e}"], []
     except FileNotFoundError:
         return False, [f"Archivo no encontrado: {plan_path}"], []
     
@@ -188,11 +184,11 @@ def run_validation(plan_path: str) -> Tuple[bool, List[str], List[str]]:
     
     # Warnings opcionales
     if not plan.get('pre_flight_check'):
-        warnings.append("Falta sección 'pre_flight_check'")
+        warnings.append("Falta seccion 'pre_flight_check'")
     if not plan.get('verification'):
-        warnings.append("Falta sección 'verification'")
+        warnings.append("Falta seccion 'verification'")
     if not plan.get('evidence'):
-        warnings.append("Falta sección 'evidence'")
+        warnings.append("Falta seccion 'evidence'")
     
     success = len(errors) == 0
     return success, errors, warnings
@@ -205,9 +201,7 @@ def main():
     
     plan_path = sys.argv[1]
     
-    print(f"\n{Colors.BOLD}══════════════════════════════════════════════════════════")
-    print(f"  AGCCE Plan Validator v1.1.0")
-    print(f"══════════════════════════════════════════════════════════{Colors.RESET}\n")
+    print(make_header("AGCCE Plan Validator v1.1.0"))
     
     log_info(f"Validando: {plan_path}")
     print()
@@ -225,12 +219,12 @@ def main():
     print()
     
     if success:
-        log_pass("Plan válido según AGCCE_Plan_v1 schema")
-        print(f"\n{Colors.GREEN}═══ VALIDATION PASSED ═══{Colors.RESET}\n")
+        log_pass("Plan valido segun AGCCE_Plan_v1 schema")
+        print(f"\n{Colors.GREEN}=== VALIDATION PASSED ==={Colors.RESET}\n")
         sys.exit(0)
     else:
         log_fail(f"{len(errors)} errores encontrados")
-        print(f"\n{Colors.RED}═══ VALIDATION FAILED ═══{Colors.RESET}\n")
+        print(f"\n{Colors.RED}=== VALIDATION FAILED ==={Colors.RESET}\n")
         sys.exit(1)
 
 

@@ -14,15 +14,19 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
-# Colores para output
-class Colors:
-    GREEN = '\033[92m'
-    RED = '\033[91m'
-    YELLOW = '\033[93m'
-    BLUE = '\033[94m'
-    CYAN = '\033[96m'
-    RESET = '\033[0m'
-    BOLD = '\033[1m'
+# Importar utilidades comunes
+try:
+    from common import Colors, Symbols, log_pass, log_fail, log_warn, log_info, make_header
+except ImportError:
+    class Colors:
+        GREEN = RED = YELLOW = BLUE = CYAN = RESET = BOLD = ''
+    class Symbols:
+        CHECK = '[OK]'
+        CROSS = '[X]'
+        WARN = '[!]'
+        INFO = '[i]'
+        PLAY = '>'
+    def make_header(title, width=60): return f"\n{'=' * width}\n  {title}\n{'=' * width}\n"
 
 
 def run_command(cmd: str, cwd: str = ".") -> Dict[str, Any]:
@@ -34,12 +38,14 @@ def run_command(cmd: str, cwd: str = ".") -> Dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=120,
-            cwd=cwd
+            cwd=cwd,
+            encoding='utf-8',
+            errors='replace'
         )
         return {
             "command": cmd,
             "exit_code": result.returncode,
-            "stdout": result.stdout[:5000],  # Limitar tamaño
+            "stdout": result.stdout[:5000],
             "stderr": result.stderr[:2000],
             "success": result.returncode == 0,
             "executed_at": datetime.now().isoformat()
@@ -49,7 +55,7 @@ def run_command(cmd: str, cwd: str = ".") -> Dict[str, Any]:
             "command": cmd,
             "exit_code": -1,
             "stdout": "",
-            "stderr": "TIMEOUT: Comando excedió 120s",
+            "stderr": "TIMEOUT: Comando excedio 120s",
             "success": False,
             "executed_at": datetime.now().isoformat()
         }
@@ -65,15 +71,13 @@ def run_command(cmd: str, cwd: str = ".") -> Dict[str, Any]:
 
 
 def collect_git_info() -> Dict[str, Any]:
-    """Recopila información del estado de git."""
+    """Recopila informacion del estado de git."""
     info = {}
     
-    # Branch actual
     result = run_command("git branch --show-current")
     info["current_branch"] = result["stdout"].strip() if result["success"] else "unknown"
     
-    # Último commit
-    result = run_command("git log -1 --format='%H|%s|%an|%ai'")
+    result = run_command("git log -1 --format=%H|%s|%an|%ai")
     if result["success"]:
         parts = result["stdout"].strip().split("|")
         if len(parts) >= 4:
@@ -84,18 +88,17 @@ def collect_git_info() -> Dict[str, Any]:
                 "date": parts[3]
             }
     
-    # Status
     result = run_command("git status --porcelain")
     info["status"] = "clean" if not result["stdout"].strip() else "dirty"
     info["changed_files"] = [
         line.strip() for line in result["stdout"].split("\n") if line.strip()
-    ][:20]  # Limitar a 20 archivos
+    ][:20]
     
     return info
 
 
 def collect_file_info(paths: List[str]) -> List[Dict[str, Any]]:
-    """Recopila información de archivos analizados."""
+    """Recopila informacion de archivos analizados."""
     files_info = []
     
     for path in paths:
@@ -118,7 +121,7 @@ def collect_file_info(paths: List[str]) -> List[Dict[str, Any]]:
 
 
 def count_lines(path: str) -> Optional[int]:
-    """Cuenta líneas de un archivo."""
+    """Cuenta lineas de un archivo."""
     try:
         with open(path, 'r', encoding='utf-8', errors='ignore') as f:
             return sum(1 for _ in f)
@@ -127,15 +130,15 @@ def count_lines(path: str) -> Optional[int]:
 
 
 def run_verification_commands(plan: Dict) -> List[Dict[str, Any]]:
-    """Ejecuta comandos de verificación del plan."""
+    """Ejecuta comandos de verificacion del plan."""
     verification = plan.get("verification", {})
     commands = verification.get("commands", [])
     
     results = []
     for cmd in commands:
-        print(f"  {Colors.BLUE}►{Colors.RESET} Ejecutando: {cmd}")
+        print(f"  {Colors.BLUE}>{Colors.RESET} Ejecutando: {cmd}")
         result = run_command(cmd)
-        status = f"{Colors.GREEN}✓{Colors.RESET}" if result["success"] else f"{Colors.RED}✗{Colors.RESET}"
+        status = f"{Colors.GREEN}{Symbols.CHECK}{Colors.RESET}" if result["success"] else f"{Colors.RED}{Symbols.CROSS}{Colors.RESET}"
         print(f"    {status} Exit code: {result['exit_code']}")
         results.append(result)
     
@@ -147,9 +150,7 @@ def generate_evidence_report(plan_path: str, output_path: Optional[str] = None) 
     with open(plan_path, 'r', encoding='utf-8') as f:
         plan = json.load(f)
     
-    print(f"\n{Colors.BOLD}{'═' * 60}")
-    print(f"  AGCCE Evidence Collector v1.0")
-    print(f"{'═' * 60}{Colors.RESET}\n")
+    print(make_header("AGCCE Evidence Collector v1.0"))
     
     print(f"{Colors.CYAN}Plan:{Colors.RESET} {plan.get('plan_id')}")
     print(f"{Colors.CYAN}Objetivo:{Colors.RESET} {plan.get('objective', {}).get('description', 'N/A')}\n")
@@ -161,13 +162,13 @@ def generate_evidence_report(plan_path: str, output_path: Optional[str] = None) 
         "collector_version": "1.0.0"
     }
     
-    # 1. Información de Git
-    print(f"{Colors.BOLD}[1/4] Recopilando información de Git...{Colors.RESET}")
+    # 1. Informacion de Git
+    print(f"{Colors.BOLD}[1/4] Recopilando informacion de Git...{Colors.RESET}")
     report["git_info"] = collect_git_info()
     print(f"  Branch: {report['git_info'].get('current_branch')}")
     print(f"  Status: {report['git_info'].get('status')}")
     
-    # 2. Información de archivos
+    # 2. Informacion de archivos
     print(f"\n{Colors.BOLD}[2/4] Analizando archivos...{Colors.RESET}")
     affected_files = plan.get("objective", {}).get("affected_files", [])
     analyzed_paths = plan.get("evidence", {}).get("analyzed_paths", [])
@@ -175,7 +176,7 @@ def generate_evidence_report(plan_path: str, output_path: Optional[str] = None) 
     report["files_analyzed"] = collect_file_info(all_paths)
     print(f"  {len(report['files_analyzed'])} archivos analizados")
     
-    # 3. Comandos de verificación
+    # 3. Comandos de verificacion
     print(f"\n{Colors.BOLD}[3/4] Ejecutando verificaciones...{Colors.RESET}")
     report["verification_results"] = run_verification_commands(plan)
     passed = sum(1 for r in report["verification_results"] if r["success"])
@@ -195,11 +196,10 @@ def generate_evidence_report(plan_path: str, output_path: Optional[str] = None) 
         })
     print(f"  {len(report['steps_summary'])} pasos documentados")
     
-    # 5. Commit propuesto
     if plan.get("commit_proposal"):
         report["commit_proposal"] = plan["commit_proposal"]
     
-    # 6. Validación del plan
+    # Validacion del plan
     print(f"\n{Colors.BOLD}Validando plan...{Colors.RESET}")
     validate_result = run_command(f"python scripts/validate_plan.py {plan_path}")
     report["plan_validation"] = {
@@ -208,14 +208,12 @@ def generate_evidence_report(plan_path: str, output_path: Optional[str] = None) 
     }
     
     # Calcular score
-    all_passed = all(r["success"] for r in report["verification_results"])
+    all_passed = all(r["success"] for r in report["verification_results"]) if report["verification_results"] else True
     plan_valid = report["plan_validation"]["passed"]
-    git_clean = report["git_info"].get("status") == "clean"
     
     report["evidence_score"] = {
         "verification_passed": all_passed,
         "plan_valid": plan_valid,
-        "git_clean": git_clean,
         "overall": "PASS" if (all_passed and plan_valid) else "FAIL"
     }
     
@@ -226,12 +224,12 @@ def generate_evidence_report(plan_path: str, output_path: Optional[str] = None) 
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(report, f, indent=2, ensure_ascii=False)
     
-    print(f"\n{Colors.BOLD}{'═' * 60}{Colors.RESET}")
+    print(f"\n{'=' * 60}")
     
     if report["evidence_score"]["overall"] == "PASS":
-        print(f"{Colors.GREEN}═══ EVIDENCE COLLECTION PASSED ═══{Colors.RESET}")
+        print(f"{Colors.GREEN}=== EVIDENCE COLLECTION PASSED ==={Colors.RESET}")
     else:
-        print(f"{Colors.RED}═══ EVIDENCE COLLECTION FAILED ═══{Colors.RESET}")
+        print(f"{Colors.RED}=== EVIDENCE COLLECTION FAILED ==={Colors.RESET}")
     
     print(f"\n{Colors.BLUE}Reporte guardado en:{Colors.RESET} {output_path}\n")
     

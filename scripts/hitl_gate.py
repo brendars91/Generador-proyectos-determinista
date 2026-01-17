@@ -2,9 +2,8 @@
 """
 AGCCE HITL Gate
 Human-in-the-Loop gate para operaciones de escritura.
-Verifica que las acciones de escritura tengan aprobación explícita.
 
-Uso: python hitl_gate.py <plan.json> [--check-step S01]
+Uso: python hitl_gate.py <plan.json> [--check | --interactive]
 """
 
 import json
@@ -14,18 +13,23 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
-# Colores para output
-class Colors:
-    GREEN = '\033[92m'
-    RED = '\033[91m'
-    YELLOW = '\033[93m'
-    BLUE = '\033[94m'
-    CYAN = '\033[96m'
-    RESET = '\033[0m'
-    BOLD = '\033[1m'
+# Importar utilidades comunes
+try:
+    from common import Colors, Symbols, log_pass, log_fail, log_warn, log_info, make_header
+except ImportError:
+    class Colors:
+        GREEN = RED = YELLOW = BLUE = CYAN = RESET = BOLD = ''
+    class Symbols:
+        CHECK = '[OK]'
+        CROSS = '[X]'
+        WARN = '[!]'
+        INFO = '[i]'
+    def log_pass(msg): print(f"[OK] PASS: {msg}")
+    def log_fail(msg): print(f"[X] FAIL: {msg}")
+    def make_header(title, width=60): return f"\n{'=' * width}\n  {title}\n{'=' * width}\n"
 
 
-# Archivo de tokens de aprobación
+# Archivo de tokens de aprobacion
 APPROVAL_FILE = ".hitl_approvals.json"
 
 
@@ -62,7 +66,7 @@ def get_write_steps(plan: Dict) -> List[Dict]:
 
 
 def check_step_approval(plan_id: str, step_id: str, approvals: Dict) -> bool:
-    """Verifica si un paso tiene aprobación válida."""
+    """Verifica si un paso tiene aprobacion valida."""
     plan_approvals = approvals.get("approvals", {}).get(plan_id, {})
     step_approval = plan_approvals.get(step_id)
     
@@ -70,26 +74,27 @@ def check_step_approval(plan_id: str, step_id: str, approvals: Dict) -> bool:
         return False
     
     # Verificar que no haya expirado (24h)
-    approved_at = datetime.fromisoformat(step_approval.get("approved_at", ""))
-    if (datetime.now() - approved_at).total_seconds() > 86400:
+    try:
+        approved_at = datetime.fromisoformat(step_approval.get("approved_at", ""))
+        if (datetime.now() - approved_at).total_seconds() > 86400:
+            return False
+    except:
         return False
     
     return step_approval.get("approved", False)
 
 
 def request_approval(plan: Dict, step: Dict) -> bool:
-    """Solicita aprobación interactiva para un paso."""
-    print(f"\n{Colors.BOLD}{'═' * 60}")
-    print(f"  HITL GATE - Aprobación Requerida")
-    print(f"{'═' * 60}{Colors.RESET}\n")
+    """Solicita aprobacion interactiva para un paso."""
+    print(make_header("HITL GATE - Aprobacion Requerida"))
     
     print(f"{Colors.CYAN}Plan:{Colors.RESET} {plan.get('plan_id')}")
     print(f"{Colors.CYAN}Objetivo:{Colors.RESET} {plan.get('objective', {}).get('description', 'N/A')}")
     print()
     
-    print(f"{Colors.YELLOW}⚠ Paso que requiere aprobación:{Colors.RESET}")
+    print(f"{Colors.YELLOW}{Symbols.WARN} Paso que requiere aprobacion:{Colors.RESET}")
     print(f"  {Colors.BOLD}ID:{Colors.RESET} {step.get('id')}")
-    print(f"  {Colors.BOLD}Acción:{Colors.RESET} {step.get('action')}")
+    print(f"  {Colors.BOLD}Accion:{Colors.RESET} {step.get('action')}")
     print(f"  {Colors.BOLD}Target:{Colors.RESET} {step.get('target')}")
     print(f"  {Colors.BOLD}Resultado esperado:{Colors.RESET} {step.get('expected_outcome', 'N/A')}")
     
@@ -99,7 +104,7 @@ def request_approval(plan: Dict, step: Dict) -> bool:
     print()
     
     while True:
-        response = input(f"{Colors.GREEN}¿Aprobar esta acción? (s/n/ver): {Colors.RESET}").lower().strip()
+        response = input(f"{Colors.GREEN}Aprobar esta accion? (s/n/ver): {Colors.RESET}").lower().strip()
         
         if response in ['s', 'si', 'yes', 'y']:
             return True
@@ -110,11 +115,11 @@ def request_approval(plan: Dict, step: Dict) -> bool:
             print(json.dumps(step, indent=2, ensure_ascii=False))
             print()
         else:
-            print(f"{Colors.YELLOW}Respuesta no válida. Usa 's' para aprobar, 'n' para rechazar, 'ver' para más detalles.{Colors.RESET}")
+            print(f"{Colors.YELLOW}Respuesta no valida. Usa 's' para aprobar, 'n' para rechazar.{Colors.RESET}")
 
 
 def approve_step(plan_id: str, step_id: str, user: str = "human") -> None:
-    """Registra aprobación de un paso."""
+    """Registra aprobacion de un paso."""
     approvals = load_approvals()
     
     if plan_id not in approvals["approvals"]:
@@ -127,7 +132,7 @@ def approve_step(plan_id: str, step_id: str, user: str = "human") -> None:
     }
     
     save_approvals(approvals)
-    print(f"{Colors.GREEN}✓ Paso {step_id} aprobado y registrado{Colors.RESET}")
+    print(f"{Colors.GREEN}{Symbols.CHECK} Paso {step_id} aprobado y registrado{Colors.RESET}")
 
 
 def reject_step(plan_id: str, step_id: str, reason: str = "") -> None:
@@ -144,7 +149,7 @@ def reject_step(plan_id: str, step_id: str, reason: str = "") -> None:
     }
     
     save_approvals(approvals)
-    print(f"{Colors.RED}✗ Paso {step_id} rechazado{Colors.RESET}")
+    print(f"{Colors.RED}{Symbols.CROSS} Paso {step_id} rechazado{Colors.RESET}")
 
 
 def check_all_hitl(plan_path: str) -> bool:
@@ -156,7 +161,7 @@ def check_all_hitl(plan_path: str) -> bool:
     write_steps = get_write_steps(plan)
     
     if not write_steps:
-        print(f"{Colors.GREEN}✓ No hay pasos que requieran aprobación HITL{Colors.RESET}")
+        print(f"{Colors.GREEN}{Symbols.CHECK} No hay pasos que requieran aprobacion HITL{Colors.RESET}")
         return True
     
     print(f"\n{Colors.BOLD}Verificando {len(write_steps)} pasos con HITL...{Colors.RESET}\n")
@@ -168,8 +173,8 @@ def check_all_hitl(plan_path: str) -> bool:
         step_id = step.get('id')
         is_approved = check_step_approval(plan_id, step_id, approvals)
         
-        status = f"{Colors.GREEN}✓ Aprobado{Colors.RESET}" if is_approved else f"{Colors.YELLOW}○ Pendiente{Colors.RESET}"
-        print(f"  {status} {step_id}: {step.get('action')} → {step.get('target')}")
+        status = f"{Colors.GREEN}{Symbols.CHECK} Aprobado{Colors.RESET}" if is_approved else f"{Colors.YELLOW}[ ] Pendiente{Colors.RESET}"
+        print(f"  {status} {step_id}: {step.get('action')} -> {step.get('target')}")
         
         if not is_approved:
             all_approved = False
@@ -178,15 +183,15 @@ def check_all_hitl(plan_path: str) -> bool:
     print()
     
     if all_approved:
-        print(f"{Colors.GREEN}═══ HITL GATE PASSED ═══{Colors.RESET}")
+        print(f"{Colors.GREEN}=== HITL GATE PASSED ==={Colors.RESET}")
         return True
     else:
-        print(f"{Colors.YELLOW}═══ {len(pending)} PASOS PENDIENTES DE APROBACIÓN ═══{Colors.RESET}")
+        print(f"{Colors.YELLOW}=== {len(pending)} PASOS PENDIENTES DE APROBACION ==={Colors.RESET}")
         return False
 
 
 def interactive_approval(plan_path: str) -> bool:
-    """Proceso interactivo de aprobación de pasos."""
+    """Proceso interactivo de aprobacion de pasos."""
     plan = load_plan(plan_path)
     plan_id = plan.get('plan_id')
     approvals = load_approvals()
@@ -197,7 +202,7 @@ def interactive_approval(plan_path: str) -> bool:
         step_id = step.get('id')
         
         if check_step_approval(plan_id, step_id, approvals):
-            print(f"{Colors.GREEN}✓ {step_id} ya aprobado{Colors.RESET}")
+            print(f"{Colors.GREEN}{Symbols.CHECK} {step_id} ya aprobado{Colors.RESET}")
             continue
         
         approved = request_approval(plan, step)
@@ -205,19 +210,19 @@ def interactive_approval(plan_path: str) -> bool:
         if approved:
             approve_step(plan_id, step_id)
         else:
-            reason = input(f"{Colors.YELLOW}Razón del rechazo (opcional): {Colors.RESET}").strip()
+            reason = input(f"{Colors.YELLOW}Razon del rechazo (opcional): {Colors.RESET}").strip()
             reject_step(plan_id, step_id, reason)
-            print(f"\n{Colors.RED}Proceso de aprobación detenido por rechazo.{Colors.RESET}")
+            print(f"\n{Colors.RED}Proceso de aprobacion detenido por rechazo.{Colors.RESET}")
             return False
     
-    print(f"\n{Colors.GREEN}═══ TODOS LOS PASOS APROBADOS ═══{Colors.RESET}")
+    print(f"\n{Colors.GREEN}=== TODOS LOS PASOS APROBADOS ==={Colors.RESET}")
     return True
 
 
 def main():
     if len(sys.argv) < 2:
         print(f"Uso: python {sys.argv[0]} <plan.json> [--interactive | --check]")
-        print("  --interactive: Solicita aprobación interactiva")
+        print("  --interactive: Solicita aprobacion interactiva")
         print("  --check: Solo verifica estado de aprobaciones")
         sys.exit(1)
     
