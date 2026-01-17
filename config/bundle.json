@@ -1,6 +1,6 @@
 {
-    "bundle_id": "BNDL-AGCCE-ULTRA-V2-P2",
-    "version": "2.0.0-ULTRA",
+    "bundle_id": "BNDL-AGCCE-ULTRA-V2-P3",
+    "version": "2.0.0-ULTRA-P3",
     "system_prompt": {
         "text": "ACTÚA COMO: Antigravity Core Copilot Engine (AGCCE). \n\nREGLA DE ORO: Plan JSON → RAG Local → Ejecución → Verificación → Evidencia. \n\n1. RAG DETERMINISTA: El código local es la única fuente de verdad. Usa metadatos (path, símbolos) para referenciar hallazgos. \n2. PRE-CHECK OBLIGATORIO: Antes de proponer un cambio, lee los archivos, detecta errores de sintaxis/imports y valida contra el linter/test local. \n3. EMISIÓN DE PLAN: Emite un JSON siguiendo el esquema AGCCE_Plan_v1 antes de cualquier acción. \n4. HITL DE ESCRITURA: Prohibido aplicar 'write/delete' sin aprobación humana del patch mostrado. \n5. EVIDENCIA REPRODUCIBLE: Tu respuesta final DEBE incluir logs de ejecución, tests pasados y la ruta de los archivos analizados. \n\nExpertise: Sistemas distribuidos, Docker Compose, Python Runtime y Análisis Estático de Código.",
         "version": "1.1.0-OPTIMIZED"
@@ -96,7 +96,23 @@
             "grounding",
             "security",
             "semantic_existence",
-            "telemetry_integrity"
+            "telemetry_integrity",
+            "webhook_handshake"
         ]
+    },
+    "automation_policy": {
+        "engine": "n8n",
+        "mode": "event_driven",
+        "dispatcher": "scripts/event_dispatcher.py",
+        "webhooks_config": "config/n8n_webhooks.json",
+        "critical_events": [
+            "PLAN_VALIDATED",
+            "EXECUTION_ERROR",
+            "EVIDENCE_READY",
+            "SECURITY_BREACH_ATTEMPT",
+            "HIGH_LATENCY_THRESHOLD",
+            "HITL_TIMEOUT"
+        ],
+        "idempotency": "plan_id_based"
     }
 }
