@@ -70,55 +70,68 @@
                 "use_when": "Obtener contenido de URLs, APIs externas"
             }
         },
-        "available_but_disabled": {
+        "toggle_as_needed": {
+            "_note": "Todos funcionan. Usuario los activa/desactiva en mcp_config.json según necesidad (límite 50 tools)",
             "playwright": {
                 "description": "Automatización de navegador",
-                "enable_for": [
+                "activate_for": [
                     "testing",
                     "scraping",
-                    "ui-automation"
+                    "ui-automation",
+                    "browser-tasks"
                 ],
-                "how_to_enable": "Cambiar disabled:true a false en mcp_config.json"
+                "tools_count": "~15 tools"
             },
             "github": {
                 "description": "API de GitHub (repos, issues, PRs)",
-                "enable_for": [
+                "activate_for": [
                     "github-integration",
-                    "ci-cd"
+                    "ci-cd",
+                    "repo-management"
                 ],
-                "how_to_enable": "Cambiar disabled:true a false en mcp_config.json"
+                "tools_count": "~20 tools"
             },
             "docker": {
                 "description": "Gestión de contenedores Docker",
-                "enable_for": [
+                "activate_for": [
                     "containerization",
-                    "devops"
+                    "devops",
+                    "docker-compose"
                 ],
-                "how_to_enable": "Cambiar disabled:true a false en mcp_config.json"
+                "tools_count": "~10 tools"
             },
             "semgrep": {
                 "description": "Análisis estático avanzado",
-                "enable_for": [
+                "activate_for": [
                     "deep-security-audit",
                     "code-quality"
                 ],
-                "how_to_enable": "Cambiar disabled:true a false en mcp_config.json"
+                "tools_count": "~5 tools"
             },
             "mcp-sbom": {
-                "description": "Generación de SBOM (Software Bill of Materials)",
-                "enable_for": [
+                "description": "Generación de SBOM",
+                "activate_for": [
                     "compliance",
-                    "security-audit"
+                    "security-audit",
+                    "dependency-analysis"
                 ],
-                "how_to_enable": "Cambiar disabled:true a false en mcp_config.json"
+                "tools_count": "~5 tools"
             },
             "opa": {
                 "description": "Open Policy Agent - políticas como código",
-                "enable_for": [
+                "activate_for": [
                     "policy-enforcement",
-                    "compliance"
+                    "compliance",
+                    "authorization"
                 ],
-                "how_to_enable": "Cambiar disabled:true a false en mcp_config.json"
+                "tools_count": "~5 tools"
+            },
+            "n8n-mcp": {
+                "description": "n8n Docker (alternativa a n8n-native)",
+                "activate_for": [
+                    "n8n-docker-mode"
+                ],
+                "tools_count": "~10 tools"
             }
         }
     },
