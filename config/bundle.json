@@ -1,0 +1,87 @@
+{
+    "bundle_id": "BNDL-AGCCE-FINAL-2026",
+    "version": "1.1.0-OPTIMIZED",
+    "system_prompt": {
+        "text": "ACTÚA COMO: Antigravity Core Copilot Engine (AGCCE). \n\nREGLA DE ORO: Plan JSON → RAG Local → Ejecución → Verificación → Evidencia. \n\n1. RAG DETERMINISTA: El código local es la única fuente de verdad. Usa metadatos (path, símbolos) para referenciar hallazgos. \n2. PRE-CHECK OBLIGATORIO: Antes de proponer un cambio, lee los archivos, detecta errores de sintaxis/imports y valida contra el linter/test local. \n3. EMISIÓN DE PLAN: Emite un JSON siguiendo el esquema AGCCE_Plan_v1 antes de cualquier acción. \n4. HITL DE ESCRITURA: Prohibido aplicar 'write/delete' sin aprobación humana del patch mostrado. \n5. EVIDENCIA REPRODUCIBLE: Tu respuesta final DEBE incluir logs de ejecución, tests pasados y la ruta de los archivos analizados. \n\nExpertise: Sistemas distribuidos, Docker Compose, Python Runtime y Análisis Estático de Código.",
+        "version": "1.1.0-OPTIMIZED"
+    },
+    "model_routing": {
+        "planning_and_debug": "Claude Opus 4.5(thinking)",
+        "indexing_and_logs": "Claude Opus 4.5(thinking)",
+        "logic": "Pro orquesta la lógica del Plan JSON y las hipótesis de Debugging. Flash gestiona el chunking de archivos y la extracción de logs de Docker."
+    },
+    "tool_contracts": [
+        {
+            "name": "mcp_filesystem_rag",
+            "capability": "semantic_search_and_read",
+            "config": {
+                "ast_parsing": true,
+                "depth": "recursive"
+            }
+        },
+        {
+            "name": "docker_executor_workflow",
+            "capability": "isolated_verification",
+            "actions": [
+                "compose_up",
+                "run_tests",
+                "fetch_logs"
+            ],
+            "implementation": "workflows/docker-executor.md"
+        },
+        {
+            "name": "python_validator",
+            "capability": "static_analysis",
+            "scripts": [
+                "lint_check.py",
+                "type_check.py"
+            ]
+        },
+        {
+            "name": "git_local",
+            "capability": "version_control",
+            "protocol": "workflows/git-protocol.md"
+        }
+    ],
+    "knowledge_plan": {
+        "primary": "Local Repository (via MCP)",
+        "secondary": "Official Web Documentation",
+        "fallback": "FALTAN_DATOS (No asumir)"
+    },
+    "verifier_gate": {
+        "checks": [
+            "plan_json_schema_v1",
+            "pre_flight_check_success",
+            "hitl_token_present_for_write"
+        ],
+        "on_hallucination": "REJECT_OUTPUT_AND_REINDEX"
+    },
+    "directives_v1_1_0": {
+        "docker_plan_coupling": {
+            "rule": "Validar ID de paso (S01, S02...) en AGCCE_Plan_v1 antes de ejecutar scripts Docker",
+            "enforce": true
+        },
+        "snyk_efficiency": {
+            "allowed_phases": [
+                "pre_flight_check",
+                "verification_report"
+            ],
+            "prohibited_phases": [
+                "thinking",
+                "drafting"
+            ]
+        },
+        "git_protocol": {
+            "pre_requisite": "git status antes de plan-json-emit",
+            "post_requisite": "Proponer commit con Conventional Commits"
+        },
+        "auto_validation": {
+            "gate_script": "scripts/validate_plan.py",
+            "on_error": "regenerate_plan_without_user_intervention"
+        }
+    },
+    "observability": {
+        "trace_id": "enabled",
+        "log_level": "verbose_technical"
+    }
+}
