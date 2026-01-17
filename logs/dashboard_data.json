@@ -1,0 +1,23 @@
+{
+  "generated_at": "2026-01-17T12:13:03.201905",
+  "period_days": 7,
+  "reliability": {
+    "plans_generated": 0,
+    "plans_successful": 0,
+    "success_rate_pct": 0,
+    "total_self_corrections": 0,
+    "hallucinations_blocked": 0
+  },
+  "performance": {
+    "avg_plan_generation_ms": 0,
+    "avg_rag_indexing_ms": 0,
+    "avg_delta_efficiency_pct": 0
+  },
+  "security": {
+    "snyk_scans": 0,
+    "vulnerabilities_found": 0,
+    "commits_blocked": 0,
+    "unauthorized_paths_blocked": 0
+  },
+  "timeline": []
+}

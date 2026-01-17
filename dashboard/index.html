@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AGCCE Ultra Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --border-color: #30363d;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --accent-green: #3fb950;
+            --accent-red: #f85149;
+            --accent-yellow: #d29922;
+            --accent-blue: #58a6ff;
+            --accent-purple: #a371f7;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 0;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 30px;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 18px;
+        }
+        
+        .logo h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+        
+        .logo span {
+            color: var(--accent-blue);
+        }
+        
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--bg-tertiary);
+            border-radius: 20px;
+            font-size: 14px;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-green);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .metric-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+        }
+        
+        .metric-card h3 {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .metric-value {
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .metric-value.success { color: var(--accent-green); }
+        .metric-value.warning { color: var(--accent-yellow); }
+        .metric-value.danger { color: var(--accent-red); }
+        .metric-value.info { color: var(--accent-blue); }
+        
+        .metric-detail {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        
+        .section {
+            margin-bottom: 30px;
+        }
+        
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        
+        .section h2 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .chart-container {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px;
+            height: 300px;
+        }
+        
+        .timeline {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        .timeline-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+            font-weight: 600;
+        }
+        
+        .timeline-item {
+            display: flex;
+            align-items: flex-start;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+            gap: 16px;
+        }
+        
+        .timeline-item:last-child {
+            border-bottom: none;
+        }
+        
+        .timeline-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        
+        .timeline-icon.critical {
+            background: rgba(248, 81, 73, 0.2);
+            color: var(--accent-red);
+        }
+        
+        .timeline-icon.high {
+            background: rgba(210, 153, 34, 0.2);
+            color: var(--accent-yellow);
+        }
+        
+        .timeline-icon.blocked {
+            background: rgba(63, 185, 80, 0.2);
+            color: var(--accent-green);
+        }
+        
+        .timeline-content {
+            flex: 1;
+        }
+        
+        .timeline-title {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+        
+        .timeline-meta {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        
+        .timeline-time {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+        
+        .btn:hover {
+            background: var(--border-color);
+        }
+        
+        .empty-state {
+            padding: 40px;
+            text-align: center;
+            color: var(--text-secondary);
+        }
+        
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <div class="logo-icon">A</div>
+                <h1>AGCCE <span>Ultra</span> Dashboard</h1>
+            </div>
+            <div class="status-badge">
+                <div class="status-dot"></div>
+                <span id="status-text">Conectado</span>
+            </div>
+        </header>
+        
+        <!-- Reliability Metrics -->
+        <section class="section">
+            <div class="section-header">
+                <h2>🔒 Reliability</h2>
+                <button class="btn" onclick="refreshData()">↻ Actualizar</button>
+            </div>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <h3>Plan Success Rate</h3>
+                    <div class="metric-value success" id="success-rate">---%</div>
+                    <div class="metric-detail" id="plans-detail">-- planes generados</div>
+                </div>
+                <div class="metric-card">
+                    <h3>Self-Corrections</h3>
+                    <div class="metric-value info" id="corrections">---</div>
+                    <div class="metric-detail">Correcciones automaticas</div>
+                </div>
+                <div class="metric-card">
+                    <h3>Hallucinations Blocked</h3>
+                    <div class="metric-value warning" id="hallucinations">---</div>
+                    <div class="metric-detail">Alucinaciones evitadas</div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Performance Metrics -->
+        <section class="section">
+            <div class="section-header">
+                <h2>⚡ Performance</h2>
+            </div>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <h3>Avg Plan Generation</h3>
+                    <div class="metric-value info" id="plan-latency">--- ms</div>
+                    <div class="metric-detail">Latencia promedio</div>
+                </div>
+                <div class="metric-card">
+                    <h3>Avg RAG Indexing</h3>
+                    <div class="metric-value info" id="rag-latency">--- ms</div>
+                    <div class="metric-detail">Latencia promedio</div>
+                </div>
+                <div class="metric-card">
+                    <h3>Delta Index Efficiency</h3>
+                    <div class="metric-value success" id="delta-efficiency">---%</div>
+                    <div class="metric-detail">Archivos evitados por incremental</div>
+                </div>
+            </div>
+        </section>
+        
+        <div class="grid-2">
+            <!-- Security Metrics -->
+            <section class="section">
+                <div class="section-header">
+                    <h2>🛡️ Security</h2>
+                </div>
+                <div class="metrics-grid" style="grid-template-columns: 1fr 1fr;">
+                    <div class="metric-card">
+                        <h3>Snyk Scans</h3>
+                        <div class="metric-value info" id="snyk-scans">---</div>
+                        <div class="metric-detail">Total ejecutados</div>
+                    </div>
+                    <div class="metric-card">
+                        <h3>Commits Blocked</h3>
+                        <div class="metric-value danger" id="commits-blocked">---</div>
+                        <div class="metric-detail">Por vulnerabilidades</div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Chart -->
+            <section class="section">
+                <div class="section-header">
+                    <h2>📊 Actividad (7 dias)</h2>
+                </div>
+                <div class="chart-container">
+                    <canvas id="activityChart"></canvas>
+                </div>
+            </section>
+        </div>
+        
+        <!-- Security Timeline -->
+        <section class="section">
+            <div class="section-header">
+                <h2>🔐 Security Timeline</h2>
+            </div>
+            <div class="timeline" id="security-timeline">
+                <div class="timeline-header">Eventos de seguridad recientes</div>
+                <div class="empty-state" id="timeline-empty">
+                    Sin eventos de seguridad registrados
+                </div>
+            </div>
+        </section>
+    </div>
+    
+    <script>
+        // Datos de ejemplo (en produccion, cargar de telemetry.jsonl via backend)
+        let metricsData = {
+            reliability: {
+                success_rate_pct: 0,
+                plans_generated: 0,
+                total_self_corrections: 0,
+                hallucinations_blocked: 0
+            },
+            performance: {
+                avg_plan_generation_ms: 0,
+                avg_rag_indexing_ms: 0,
+                avg_delta_efficiency_pct: 0
+            },
+            security: {
+                snyk_scans: 0,
+                commits_blocked: 0
+            },
+            timeline: []
+        };
+        
+        // Chart.js config
+        let activityChart;
+        
+        function initChart() {
+            const ctx = document.getElementById('activityChart').getContext('2d');
+            activityChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'],
+                    datasets: [{
+                        label: 'Planes generados',
+                        data: [0, 0, 0, 0, 0, 0, 0],
+                        borderColor: '#58a6ff',
+                        backgroundColor: 'rgba(88, 166, 255, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }, {
+                        label: 'Snyk bloqueos',
+                        data: [0, 0, 0, 0, 0, 0, 0],
+                        borderColor: '#f85149',
+                        backgroundColor: 'rgba(248, 81, 73, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#c9d1d9' }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: '#30363d' },
+                            ticks: { color: '#8b949e' }
+                        },
+                        y: {
+                            grid: { color: '#30363d' },
+                            ticks: { color: '#8b949e' }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function updateUI(data) {
+            // Reliability
+            document.getElementById('success-rate').textContent = data.reliability.success_rate_pct + '%';
+            document.getElementById('plans-detail').textContent = data.reliability.plans_generated + ' planes generados';
+            document.getElementById('corrections').textContent = data.reliability.total_self_corrections;
+            document.getElementById('hallucinations').textContent = data.reliability.hallucinations_blocked;
+            
+            // Performance
+            document.getElementById('plan-latency').textContent = data.performance.avg_plan_generation_ms + ' ms';
+            document.getElementById('rag-latency').textContent = data.performance.avg_rag_indexing_ms + ' ms';
+            document.getElementById('delta-efficiency').textContent = data.performance.avg_delta_efficiency_pct + '%';
+            
+            // Security
+            document.getElementById('snyk-scans').textContent = data.security.snyk_scans;
+            document.getElementById('commits-blocked').textContent = data.security.commits_blocked;
+            
+            // Timeline
+            updateTimeline(data.timeline);
+        }
+        
+        function updateTimeline(events) {
+            const container = document.getElementById('security-timeline');
+            const emptyState = document.getElementById('timeline-empty');
+            
+            if (!events || events.length === 0) {
+                emptyState.style.display = 'block';
+                return;
+            }
+            
+            emptyState.style.display = 'none';
+            
+            // Remove existing items except header and empty state
+            const header = container.querySelector('.timeline-header');
+            container.innerHTML = '';
+            container.appendChild(header);
+            container.appendChild(emptyState);
+            emptyState.style.display = 'none';
+            
+            events.slice(0, 10).forEach(event => {
+                const metrics = event.metrics || {};
+                const severity = metrics.severity || 'info';
+                const eventType = metrics.event_type || 'unknown';
+                const timestamp = event.timestamp ? new Date(event.timestamp).toLocaleString() : '';
+                
+                const item = document.createElement('div');
+                item.className = 'timeline-item';
+                
+                let iconClass = 'blocked';
+                let icon = '✓';
+                if (severity === 'critical') {
+                    iconClass = 'critical';
+                    icon = '✕';
+                } else if (severity === 'high') {
+                    iconClass = 'high';
+                    icon = '!';
+                }
+                
+                item.innerHTML = `
+                    <div class="timeline-icon ${iconClass}">${icon}</div>
+                    <div class="timeline-content">
+                        <div class="timeline-title">${eventType.replace(/_/g, ' ').toUpperCase()}</div>
+                        <div class="timeline-meta">${metrics.file_path || 'Sistema'}</div>
+                    </div>
+                    <div class="timeline-time">${timestamp}</div>
+                `;
+                
+                container.appendChild(item);
+            });
+        }
+        
+        async function loadTelemetryData() {
+            try {
+                // En produccion, esto haria fetch a un endpoint o leeria el archivo
+                // Por ahora, simular datos de ejemplo
+                const response = await fetch('../logs/dashboard_data.json');
+                if (response.ok) {
+                    metricsData = await response.json();
+                    updateUI(metricsData);
+                }
+            } catch (e) {
+                console.log('Usando datos de ejemplo');
+            }
+        }
+        
+        function refreshData() {
+            document.getElementById('status-text').textContent = 'Actualizando...';
+            loadTelemetryData().then(() => {
+                document.getElementById('status-text').textContent = 'Conectado';
+            });
+        }
+        
+        // Inicializar
+        document.addEventListener('DOMContentLoaded', () => {
+            initChart();
+            loadTelemetryData();
+            
+            // Auto-refresh cada 30 segundos
+            setInterval(refreshData, 30000);
+        });
+    </script>
+</body>
+</html>
