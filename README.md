@@ -1,10 +1,10 @@
-# AGCCE Ultra v2.5 - Antigravity Core Copilot Engine
+# AGCCE Ultra v3.0-LITE - Antigravity Core Copilot Engine
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Snyk](https://img.shields.io/badge/Security-Snyk-purple.svg)](https://snyk.io/)
 
-> Motor de copiloto de IA determinístico con RAG semántico, auto-corrección y observabilidad completa.
+> Motor de copiloto de IA determinístico con RAG semántico, auto-corrección, Progressive Disclosure y observabilidad completa.
 
 ---
 
@@ -196,4 +196,4 @@ Desarrollado con ❤️ usando:
 
 ---
 
-> **Estado: AGCCE v2.5-DISTRIBUTABLE ✅**
+> **Estado: AGCCE v3.0-LITE ✅ - Progressive Disclosure Ready**
