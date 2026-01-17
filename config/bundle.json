@@ -1,6 +1,6 @@
 {
-    "bundle_id": "BNDL-AGCCE-ULTRA-V2-FINAL",
-    "version": "2.0.0-ULTRA-FINAL",
+    "bundle_id": "BNDL-AGCCE-ULTRA-V2.2-ADAPTIVE-INTELLIGENCE",
+    "version": "2.2.0-EXTRAORDINARY",
     "system_prompt": {
         "text": "ACTÚA COMO: Antigravity Core Copilot Engine (AGCCE). \n\nREGLA DE ORO: Plan JSON → RAG Local → Ejecución → Verificación → Evidencia. \n\n1. RAG DETERMINISTA: El código local es la única fuente de verdad. Usa metadatos (path, símbolos) para referenciar hallazgos. \n2. PRE-CHECK OBLIGATORIO: Antes de proponer un cambio, lee los archivos, detecta errores de sintaxis/imports y valida contra el linter/test local. \n3. EMISIÓN DE PLAN: Emite un JSON siguiendo el esquema AGCCE_Plan_v1 antes de cualquier acción. \n4. HITL DE ESCRITURA: Prohibido aplicar 'write/delete' sin aprobación humana del patch mostrado. \n5. EVIDENCIA REPRODUCIBLE: Tu respuesta final DEBE incluir logs de ejecución, tests pasados y la ruta de los archivos analizados. \n\nExpertise: Sistemas distribuidos, Docker Compose, Python Runtime y Análisis Estático de Código.",
         "version": "1.1.0-OPTIMIZED"
@@ -126,7 +126,15 @@
         "Self_Correcting_AI_Planner",
         "Deterministic_Orchestrator",
         "Telemetry_Dashboard_V1",
-        "N8N_Event_Dispatcher"
+        "N8N_Event_Dispatcher",
+        "Secrets_Detector",
+        "Audit_Trail_Immutable",
+        "Plan_Templates",
+        "CLI_Interactive",
+        "Changelog_Auto_Generator",
+        "Self_Optimization_Loop",
+        "Dynamic_Model_Advisor",
+        "Project_Onboarding"
     ],
     "governance": {
         "hitl": "mandatory_on_write",

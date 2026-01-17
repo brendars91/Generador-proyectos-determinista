@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """
-AGCCE Metrics Collector v1.0
+AGCCE Metrics Collector v2.0
 Colector de metricas asincrono para observabilidad.
 
 TELEMETRY CONTRACT: AGCCE-OBS-V1
 - Persistencia: logs/telemetry.jsonl (append-only)
 - Retencion: 30 dias
 - Zero-latency: Collector asincrono
+- Project-aware: Cada entrada incluye project_id
 
 Uso:
   from metrics_collector import Telemetry
+  Telemetry.set_project("mi-proyecto")
   Telemetry.record_plan_generated(success=True, attempts=1, latency_ms=150)
 """
 
@@ -33,6 +35,7 @@ TELEMETRY_CONTRACT = "AGCCE-OBS-V1"
 # Cola asincrona para no bloquear pipeline
 _telemetry_queue: Queue = Queue()
 _worker_started = False
+_current_project: str = None  # Proyecto activo
 
 
 def _get_branch_name() -> str:
@@ -98,9 +101,16 @@ class Telemetry:
             "dimensions": {
                 "branch_name": _get_branch_name(),
                 "model_id": "gemini-2.5-pro",  # Default, puede sobreescribirse
-                "hostname": os.environ.get("COMPUTERNAME", "local")
+                "hostname": os.environ.get("COMPUTERNAME", "local"),
+                "project_id": _current_project or _get_project_from_cwd()
             }
         }
+    
+    @staticmethod
+    def set_project(project_id: str) -> None:
+        """Establece el proyecto activo para todas las métricas."""
+        global _current_project
+        _current_project = project_id
     
     @staticmethod
     def record_async(entry: Dict) -> None:
