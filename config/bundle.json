@@ -7,7 +7,7 @@
     },
     "model_routing": {
         "planning_and_debug": "Claude Opus 4.5(thinking)",
-        "indexing_and_logs": "Claude Opus 4.5(thinking)",
+        "indexing_and_logs": "Claude Opus 4.5(thinking) or Gemini 3 pro",
         "logic": "Pro orquesta la lógica del Plan JSON y las hipótesis de Debugging. Flash gestiona el chunking de archivos y la extracción de logs de Docker."
     },
     "tool_contracts": [
