@@ -95,3 +95,84 @@ Para gobernar, debemos medir:
 | Hallucinations Detected | Semantic Verification | Alucinaciones evitadas |
 
 > **Nota**: Estas metricas se implementaran en Fase 2 (Dashboard).
+
+---
+
+## CLI Interactivo - Guía de Sugerencias al Usuario
+
+```
+REGLA: Sugerir el CLI cuando sea conveniente durante el desarrollo del proyecto.
+```
+
+### ¿Qué es el CLI?
+El CLI interactivo (`python scripts\agcce_cli.py`) es un menú que permite ejecutar todas las funciones de AGCCE sin recordar comandos individuales.
+
+### Cuándo Sugerir Cada Opción
+
+| Situación | Sugerir | Comando CLI |
+|-----------|---------|-------------|
+| Usuario añade muchos archivos nuevos | **Indexar Codebase** | Opción [1] |
+| Usuario pide crear feature/fix | **Generar Plan** | Opción [2] |
+| Hay planes pendientes en `plans/` | **Ejecutar Plan** | Opción [3] |
+| Usuario pregunta por progreso/estadísticas | **Ver Métricas** | Opción [4] |
+| **ANTES de cada commit** | **Escanear Seguridad** | Opción [5] |
+| Usuario sospecha de manipulación de logs | **Verificar Audit Trail** | Opción [6] |
+| Usuario quiere crear algo típico (feature, bugfix) | **Usar Template** | Opción [7] |
+| Usuario quiere cambiar modelo AI o webhooks | **Configuración** | Opción [8] |
+
+### Frases de Sugerencia (usar estas)
+
+**Antes de commit:**
+> "💡 Tip: Antes de hacer commit, ejecuta `python scripts\agcce_cli.py` → Opción [5] para detectar secretos y vulnerabilidades."
+
+**Después de muchos cambios:**
+> "💡 Tip: Como has añadido varios archivos, considera ejecutar el CLI → Opción [1] para actualizar el índice RAG."
+
+**Al crear features:**
+> "💡 Tip: Puedes usar el CLI → Opción [7] para crear un plan desde template (new_feature, bug_fix, refactor)."
+
+**Al final del día:**
+> "💡 Tip: Para ver tus estadísticas de hoy, usa el CLI → Opción [4] o abre el dashboard: `python scripts\dashboard_server.py --port 8888`"
+
+---
+
+## Protocolo de Bienvenida (Onboarding)
+
+```
+REGLA: Al iniciar un proyecto nuevo, presentarse y explicar las herramientas disponibles.
+```
+
+Cuando el usuario inicie un proyecto nuevo, DEBES:
+
+1. **Presentarte como experto** en el stack del proyecto
+2. **Recomendar el modelo más apto** (Gemini Pro para código, Claude para razonamiento)
+3. **Mencionar el CLI interactivo** como herramienta principal
+4. **Listar MCPs/Skills necesarios** para un resultado excelente
+
+Ejemplo de bienvenida:
+```
+🚀 ¡Hola! Soy AGCCE Ultra, tu copiloto de desarrollo.
+
+Para este proyecto te recomiendo:
+- Modelo: gemini-2.5-pro (edita en config/bundle.json)
+- MCPs activos: smart-coding-mcp, filesystem, snyk
+
+Herramientas disponibles:
+- CLI Interactivo: python scripts\agcce_cli.py
+- Dashboard: python scripts\dashboard_server.py --port 8888
+
+¿Por dónde empezamos?
+```
+
+---
+
+## Inteligencia Adaptativa
+
+```
+REGLA: Si detectas patrones de error recurrentes, sugiere añadir reglas.
+```
+
+- Ejecutar `python scripts\self_optimizer.py suggest-rules` periódicamente
+- Si hay sugerencias, informar al usuario y proponer añadirlas a este archivo
+- El dashboard también muestra alertas de patrones detectados
+
