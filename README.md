@@ -1,4 +1,4 @@
-# AGCCE Ultra v3.0-LITE - Antigravity Core Copilot Engine
+# AGCCE Ultra v4.0 GUARDIAN MAS - Antigravity Core Copilot Engine
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -196,4 +196,4 @@ Desarrollado con ❤️ usando:
 
 ---
 
-> **Estado: AGCCE v3.0-LITE ✅ - Progressive Disclosure Ready**
+> **Estado: AGCCE v4.0-GUARDIAN-MAS ✅ - Security Red Team + Multi-Agent System**
