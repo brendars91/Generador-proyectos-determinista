@@ -1,8 +1,8 @@
-# AGCCE Ultra v2.0 - Documentación Completa
+# AGCCE Ultra v4.0 - Documentación Completa
 
-> **Versión**: 2.0.0-ULTRA-FINAL  
-> **Bundle ID**: BNDL-AGCCE-ULTRA-V2-FINAL  
-> **Fecha de Creación**: 2026-01-17  
+> **Versión**: 4.0.0-GUARDIAN-MAS  
+> **Bundle ID**: BNDL-AGCCE-ULTRA-V4.0-GUARDIAN-MAS  
+> **Fecha**: 2026-01-18  
 > **Autor**: Antigravity AI Assistant
 
 ---
@@ -20,6 +20,7 @@
 | [07_seguridad.md](07_seguridad.md) | Controles de seguridad |
 | [08_historial_desarrollo.md](08_historial_desarrollo.md) | Historial completo del desarrollo |
 | [09_troubleshooting.md](09_troubleshooting.md) | Solución de problemas |
+| [10_v4_guardian_mas.md](10_v4_guardian_mas.md) | **NUEVO** Security Guardian + Multi-Agent System |
 
 ---
 
