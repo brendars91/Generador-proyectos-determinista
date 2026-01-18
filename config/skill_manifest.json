@@ -207,8 +207,8 @@
     },
     "skills_locations": {
         "project_skills": ".agent/skills/",
-        "global_skills": "C:/Users/ASUS/.gemini/Skills proyectos/",
-        "_note": "Consultar estas ubicaciones para skills específicos"
+        "global_skills": "${GEMINI_HOME}/Skills proyectos/",
+        "_note": "global_skills usa variable de entorno GEMINI_HOME. Default: ~/.gemini/"
     },
     "auto_suggestions": {
         "before_commit": "💡 Tip: Ejecuta CLI → Opción [5] para escanear seguridad",

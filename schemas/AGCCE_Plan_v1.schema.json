@@ -221,6 +221,76 @@
                     "type": "string"
                 }
             }
+        },
+        "security_analysis": {
+            "type": "object",
+            "description": "Análisis de seguridad proactivo (Security Guardian v4.0)",
+            "properties": {
+                "analyzed_at": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "assumptions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Suposiciones de seguridad del código"
+                },
+                "attack_vectors": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "type": {
+                                "type": "string"
+                            },
+                            "description": {
+                                "type": "string"
+                            },
+                            "likelihood": {
+                                "type": "string",
+                                "enum": [
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "critical"
+                                ]
+                            },
+                            "impact": {
+                                "type": "string",
+                                "enum": [
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "critical"
+                                ]
+                            }
+                        }
+                    },
+                    "description": "Vectores de ataque identificados"
+                },
+                "mitigations": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Mitigaciones propuestas"
+                },
+                "validation_tests": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Tests PoC para validar seguridad"
+                },
+                "security_score": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100,
+                    "description": "Puntuación de seguridad (100 = sin riesgos)"
+                }
+            }
         }
     }
 }

@@ -36,6 +36,7 @@ TELEMETRY_CONTRACT = "AGCCE-OBS-V1"
 _telemetry_queue: Queue = Queue()
 _worker_started = False
 _current_project: str = None  # Proyecto activo
+_current_agent: str = None  # Agente activo (v4.0 MAS)
 
 
 def _get_branch_name() -> str:
@@ -102,7 +103,8 @@ class Telemetry:
                 "branch_name": _get_branch_name(),
                 "model_id": "gemini-2.5-pro",  # Default, puede sobreescribirse
                 "hostname": os.environ.get("COMPUTERNAME", "local"),
-                "project_id": _current_project or _get_project_from_cwd()
+                "project_id": _current_project or _get_project_from_cwd(),
+                "agent_id": _current_agent or "orchestrator"  # v4.0: Trazabilidad MAS
             }
         }
     
@@ -111,6 +113,12 @@ class Telemetry:
         """Establece el proyecto activo para todas las métricas."""
         global _current_project
         _current_project = project_id
+    
+    @staticmethod
+    def set_agent(agent_id: str) -> None:
+        """Establece el agente activo para trazabilidad MAS (v4.0)."""
+        global _current_agent
+        _current_agent = agent_id
     
     @staticmethod
     def record_async(entry: Dict) -> None:

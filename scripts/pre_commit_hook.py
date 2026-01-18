@@ -110,9 +110,13 @@ def run_snyk_code_scan() -> Tuple[bool, str, int, int]:
     Bloquea si encuentra Critical/High.
     """
     try:
+        # Buscar Snyk CLI dinámicamente (portable)
+        import shutil
+        snyk_cmd = shutil.which("snyk") or shutil.which("snyk-win") or "snyk"
+        
         result = subprocess.run(
             [
-                "C:\\Users\\ASUS\\AppData\\Local\\snyk\\vscode-cli\\snyk-win.exe",
+                snyk_cmd,
                 "code", "test",
                 "--severity-threshold=high",
                 "."

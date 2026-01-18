@@ -1,70 +1,208 @@
-# AGCCE Ultra v4.0 GUARDIAN MAS - Antigravity Core Copilot Engine
+# AGCCE Ultra v4.0 APEX - Antigravity Core Copilot Engine
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Snyk](https://img.shields.io/badge/Security-Snyk-purple.svg)](https://snyk.io/)
+[![License](https://img.shields.io/badge/License-Non--Commercial-orange.svg)](LICENSE)
+[![Security](https://img.shields.io/badge/Security-Snyk%20Protected-purple.svg)](https://snyk.io/)
+[![Version](https://img.shields.io/badge/Version-4.0.0--APEX-green.svg)](https://github.com/brendars91/Generador-proyectos-determinista)
 
-> Motor de copiloto de IA determinístico con RAG semántico, auto-corrección, Progressive Disclosure y observabilidad completa.
+> **Motor de IA Determinístico con Arquitectura Multi-Agente, Security Guardian y Observabilidad Completa**
 
 ---
 
-## 🎯 ¿Qué es AGCCE Ultra?
+## 🏗️ Arquitectura Multi-Agente (MAS)
 
-AGCCE (Antigravity Core Copilot Engine) es un sistema de copiloto de desarrollo que:
+AGCCE v4.0 implementa un sistema jerárquico de agentes especializados:
 
-- 🔍 **Busca inteligentemente** en tu código usando RAG semántico
-- 🤖 **Planifica y ejecuta** tareas de forma determinística
-- 🛡️ **Protege tu código** con escaneos de seguridad (Snyk)
-- 📊 **Registra todo** para auditoría y observabilidad
-- 🔔 **Notifica eventos** vía webhooks (n8n)
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    AGCCE ULTRA v4.0 APEX                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   ┌──────────────┐                                              │
+│   │ ORCHESTRATOR │ ◄── Coordina, no ejecuta                    │
+│   └──────┬───────┘                                              │
+│          │                                                      │
+│   ┌──────▼───────────────────────────────────────────────┐     │
+│   │              MULTI-AGENT SYSTEM (MAS)                │     │
+│   │                                                       │     │
+│   │  ┌──────────┐  ┌───────────┐  ┌─────────┐            │     │
+│   │  │Researcher│─→│ Architect │─→│Constructor│           │     │
+│   │  └──────────┘  └───────────┘  └────┬────┘            │     │
+│   │                                     │                 │     │
+│   │                    ┌────────────────▼────────┐       │     │
+│   │                    │        Auditor          │       │     │
+│   │                    │   (Security Guardian)   │       │     │
+│   │                    └────────────┬────────────┘       │     │
+│   │                                 │                    │     │
+│   │                    ┌────────────▼────────┐           │     │
+│   │                    │       Tester        │           │     │
+│   │                    └─────────────────────┘           │     │
+│   └───────────────────────────────────────────────────────┘     │
+│                                                                 │
+│   ┌────────────┐  ┌────────────┐  ┌────────────┐               │
+│   │ Blackboard │  │ Graceful   │  │ Telemetry  │               │
+│   │  (Estado)  │  │ Recovery   │  │ Dashboard  │               │
+│   └────────────┘  └────────────┘  └────────────┘               │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Roles de Agentes
+
+| Agente | Rol | MCPs Permitidos |
+|--------|-----|-----------------|
+| **Researcher** | Busca contexto en codebase y docs | smart-coding-mcp, context7, fetch |
+| **Architect** | Diseña solución, crea Plan JSON | sequential-thinking, filesystem |
+| **Constructor** | Escribe código según el plan | filesystem, smart-coding-mcp |
+| **Auditor** | Revisa seguridad (Red Team) | snyk, filesystem |
+| **Tester** | Verifica calidad y tests | filesystem |
 
 ---
 
 ## 🚀 Instalación Rápida
 
-### 1. Clonar el repositorio
+### 1. Clonar Repositorio
 
 ```powershell
-git clone https://github.com/TU_USUARIO/agcce-ultra.git
+git clone https://github.com/brendars91/Generador-proyectos-determinista.git agcce-ultra
 cd agcce-ultra
 ```
 
-### 2. Ejecutar el instalador
+### 2. Ejecutar Instalador
 
 ```powershell
 .\scripts\setup.ps1
 ```
 
-### 3. Activar entorno virtual
+### 3. Activar Entorno
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
 ```
 
-### 4. Iniciar el CLI
+### 4. Verificar Instalación
 
 ```powershell
-python scripts\agcce_cli.py
+python scripts/agcce_cli.py
 ```
 
 ---
 
 ## 📋 Requisitos
 
-| Herramienta | Versión | Requerido |
-|-------------|---------|-----------|
+| Componente | Versión | Requerido |
+|------------|---------|-----------|
 | Python | 3.10+ | ✅ |
 | Git | 2.0+ | ✅ |
+| Snyk CLI | Latest | ✅ Seguridad |
+| pytest | Latest | Tests |
 | Docker | 20.0+ | Opcional |
-| Snyk CLI | Latest | Opcional |
-| n8n | 1.0+ | Opcional |
 
-### MCPs Recomendados (Antigravity)
+### MCPs Recomendados
 
-- `smart-coding-mcp` - Búsqueda semántica
+- `smart-coding-mcp` - Búsqueda semántica RAG
 - `filesystem` - Operaciones de archivos
-- `sequential-thinking` - Razonamiento estructurado
 - `snyk` - Escaneos de seguridad
+- `sequential-thinking` - Razonamiento estructurado
+
+---
+
+## 🎯 Uso Principal
+
+### CLI Interactivo (Recomendado)
+
+```powershell
+python scripts/agcce_cli.py
+```
+
+### Comandos Directos
+
+```powershell
+# Orquestador - Ejecutar un plan
+python scripts/orchestrator.py plans/mi_plan.json
+
+# Security Guardian - Analizar código
+python scripts/security_guardian.py analyze scripts/
+
+# Ver flujo de agentes
+python scripts/agent_switcher.py workflow
+
+# Estado del Blackboard
+python scripts/blackboard.py status
+
+# Ejecutar tests
+pytest tests/ -v
+```
+
+---
+
+## 🛡️ Security Guardian (Red Team)
+
+El sistema detecta vulnerabilidades lógicas que Snyk no puede ver:
+
+| Tipo | Descripción |
+|------|-------------|
+| **IDOR** | Acceso no autorizado cambiando IDs |
+| **Race Condition** | Condiciones de carrera |
+| **Auth Bypass** | Bypass de autenticación |
+| **Logic Flaw** | Errores de lógica de negocio |
+| **Data Exposure** | Filtración de datos sensibles |
+| **SSRF** | Server-Side Request Forgery |
+
+### Protocolo Red-to-Green
+
+1. **Hipótesis de Ataque**: "¿Cómo explotaría esto un atacante?"
+2. **PoC Test**: Escribir test que demuestre el fallo
+3. **Fix**: Implementar corrección
+4. **Verify**: Ejecutar test para confirmar
+
+---
+
+## 🆘 Primeros Auxilios
+
+### Si el Orquestrador Falla
+
+```powershell
+# 1. Ver estado actual
+python scripts/blackboard.py status
+
+# 2. Ver último error
+python scripts/blackboard.py get errors
+
+# 3. Limpiar estado y reintentar
+python scripts/blackboard.py clear
+python scripts/orchestrator.py plans/mi_plan.json
+```
+
+### Si un Agente No Responde
+
+```powershell
+# Ver estadísticas de recuperación
+python scripts/graceful_recovery.py stats
+
+# El sistema reintenta automáticamente 3 veces
+# Si persiste, revisa logs/recovery_events.jsonl
+```
+
+### Si Snyk Bloquea el Commit
+
+```powershell
+# Ver vulnerabilidades
+python scripts/security_guardian.py analyze .
+
+# Opciones:
+# 1. Corregir vulnerabilidades
+# 2. Si es falso positivo, documentar en .snyk
+```
+
+### Si los Tests Fallan
+
+```powershell
+# Ejecutar test específico con debug
+pytest tests/test_skill_loader.py -v --tb=long
+
+# Ver cobertura
+pytest tests/ --cov=scripts --cov-report=html
+```
 
 ---
 
@@ -72,128 +210,91 @@ python scripts\agcce_cli.py
 
 ```
 agcce-ultra/
-├── scripts/           # Scripts Python del sistema
-│   ├── agcce_cli.py   # CLI interactivo
-│   ├── orchestrator.py
-│   ├── plan_generator.py
-│   └── ...
-├── config/            # Configuración
-│   ├── bundle.json    # Config principal
-│   └── n8n_webhooks.json
-├── dashboard/         # Dashboard web
-├── templates/         # Templates de planes
-├── schemas/           # Schemas JSON
-├── documentacion/     # Documentación completa
-├── n8n/               # Workflows de n8n
-├── .agent/            # Reglas y workflows del agente
-├── logs/              # Logs y telemetría
-├── plans/             # Planes generados
-└── evidence/          # Evidencia de ejecuciones
+├── .agent/                    # Configuración del agente
+│   ├── rules/                 # Reglas de comportamiento
+│   ├── workflows/             # Workflows automatizados
+│   └── skills/                # Skills especializados
+│       └── security-red-team/ # Skill de seguridad
+├── config/                    # Configuración
+│   ├── bundle.json            # Config principal
+│   ├── skill_manifest.json    # Mapa de MCPs por fase
+│   └── agent_profiles/        # Perfiles de agentes MAS
+├── scripts/                   # Scripts Python
+│   ├── orchestrator.py        # Orquestador principal
+│   ├── security_guardian.py   # Red Team automatizado
+│   ├── agent_switcher.py      # Cambio de contexto MAS
+│   ├── blackboard.py          # Estado compartido
+│   ├── graceful_recovery.py   # Manejo de errores
+│   └── agcce_cli.py           # CLI interactivo
+├── tests/                     # Tests automatizados
+├── schemas/                   # JSON schemas
+├── templates/                 # Plantillas de planes
+├── dashboard/                 # Dashboard web
+├── documentacion/             # Documentación completa
+├── logs/                      # Telemetría y logs
+├── plans/                     # Planes y cola de tareas
+├── evidence/                  # Evidencia de ejecuciones
+├── LICENSE                    # Licencia (no comercial)
+└── README.md                  # Este archivo
 ```
 
 ---
 
-## 🖥️ Dashboard - Bitácora de Mis Proyectos
+## 📊 Observabilidad
 
-Inicia el servidor:
+### Dashboard
 
 ```powershell
-python scripts\dashboard_server.py --port 8888
+python scripts/dashboard_server.py --port 8888
+# Abrir: http://localhost:8888/dashboard/index.html
 ```
 
-Abre en tu navegador:
-```
-http://localhost:8888/dashboard/index.html
-```
+### Telemetría
 
-**Funcionalidades:**
-- 📊 Métricas en tiempo real
-- 🌓 Modo oscuro/claro
-- 📥 Export PDF/JSON
-- 🔍 Filtro por proyecto
-
----
-
-## 🔧 Comandos Principales
-
-```powershell
-# CLI Interactivo (recomendado)
-python scripts\agcce_cli.py
-
-# Indexar codebase
-python scripts\rag_indexer.py
-
-# Generar plan
-python scripts\plan_generator.py --objective "Tu objetivo"
-
-# Ejecutar plan
-python scripts\orchestrator.py plans\tu_plan.json
-
-# Ver métricas
-python scripts\metrics_collector.py summary 7
-
-# Detectar secretos
-python scripts\secrets_detector.py .
-
-# Generar changelog
-python scripts\changelog_generator.py
-```
-
----
-
-## 🛡️ Seguridad
-
-AGCCE Ultra implementa múltiples capas de seguridad:
-
-1. **Gate Snyk**: Bloquea commits con vulnerabilidades
-2. **Secrets Detector**: Detecta API keys antes de commit
-3. **HITL**: Aprobación humana para operaciones de escritura
-4. **Audit Trail**: Log inmutable de todas las acciones
+Todas las métricas van a `logs/telemetry.jsonl`:
+- Incluye `project_id` y `agent_id`
+- Formato JSONL append-only
+- Retención: 30 días
 
 ---
 
 ## 📚 Documentación
 
-La documentación completa está en `documentacion/`:
-
-- [01. Visión General](documentacion/01_vision_general.md)
-- [02. Guía de Instalación](documentacion/02_guia_instalacion.md)
-- [03. Guía de Uso](documentacion/03_guia_uso.md)
-- [04. Referencia de Scripts](documentacion/04_referencia_scripts.md)
-- [05. Integración n8n](documentacion/05_integracion_n8n.md)
-- [06. Observabilidad](documentacion/06_observabilidad.md)
-- [07. Seguridad](documentacion/07_seguridad.md)
-- [08. Historial de Desarrollo](documentacion/08_historial_desarrollo.md)
-- [09. Troubleshooting](documentacion/09_troubleshooting.md)
-
----
-
-## 🤝 Contribuir
-
-1. Fork el repositorio
-2. Crea una rama: `git checkout -b feature/mi-feature`
-3. Haz tus cambios
-4. Ejecuta el verificador: `python scripts\secrets_detector.py --scan-staged`
-5. Commit: `git commit -m "feat: mi nueva feature"`
-6. Push: `git push origin feature/mi-feature`
-7. Abre un Pull Request
+| Documento | Descripción |
+|-----------|-------------|
+| [01. Visión General](documentacion/01_vision_general.md) | Arquitectura |
+| [02. Instalación](documentacion/02_guia_instalacion.md) | Setup |
+| [03. Uso](documentacion/03_guia_uso.md) | Guía de uso |
+| [04. Scripts](documentacion/04_referencia_scripts.md) | Referencia |
+| [05. n8n](documentacion/05_integracion_n8n.md) | Webhooks |
+| [06. Observabilidad](documentacion/06_observabilidad.md) | Métricas |
+| [07. Seguridad](documentacion/07_seguridad.md) | HITL, Snyk |
+| [08. Historial](documentacion/08_historial_desarrollo.md) | Changelog |
+| [09. Troubleshooting](documentacion/09_troubleshooting.md) | Problemas |
+| [10. v4.0 MAS](documentacion/10_v4_guardian_mas.md) | Multi-Agent |
 
 ---
 
-## 📄 Licencia
+## 📜 Licencia
 
-MIT License - ver [LICENSE](LICENSE) para detalles.
+**Uso Personal y No Comercial Únicamente**
+
+- ✅ Usar, copiar, modificar para uso personal
+- ❌ Vender, sublicenciar, uso comercial sin permiso
+- ✅ Redistribuir si mantiene esta licencia
+
+Ver [LICENSE](LICENSE) para detalles completos.
 
 ---
 
 ## 🙏 Créditos
 
-Desarrollado con ❤️ usando:
-- [Antigravity](https://github.com/anthropics/anthropic-cookbook) - Motor de agentes
-- [Snyk](https://snyk.io/) - Seguridad de código
-- [n8n](https://n8n.io/) - Automatización de workflows
+Desarrollado con:
+- [Antigravity](https://github.com/google/generative-ai-python) - Motor de agentes
+- [Snyk](https://snyk.io/) - Seguridad
+- [n8n](https://n8n.io/) - Automatización
 - [Chart.js](https://www.chartjs.org/) - Visualizaciones
 
 ---
 
-> **Estado: AGCCE v4.0-GUARDIAN-MAS ✅ - Security Red Team + Multi-Agent System**
+> **AGCCE v4.0-APEX MISSION READY 🚀**
