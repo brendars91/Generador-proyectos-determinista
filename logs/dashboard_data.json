@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-01-17T20:08:01.413815",
+  "generated_at": "2026-01-18T16:57:11.376461",
   "period_days": 7,
   "reliability": {
     "plans_generated": 0,
@@ -19,5 +19,12 @@
     "commits_blocked": 0,
     "unauthorized_paths_blocked": 0
   },
-  "timeline": []
+  "timeline": [],
+  "projects": [
+    "Agente Copilot Engine",
+    "Design bei Crisa",
+    "compartir_proyecto",
+    "examples",
+    "test-dashboard"
+  ]
 }

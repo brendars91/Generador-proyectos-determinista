@@ -31,6 +31,9 @@ def generate_dashboard_data(days: int = 7) -> dict:
     # Obtener timeline de seguridad
     timeline = TelemetryReader.get_security_timeline(days)
     
+    # Obtener proyectos
+    projects = get_projects()
+    
     # Estructurar para el dashboard
     data = {
         "generated_at": __import__('datetime').datetime.now().isoformat(),
@@ -38,10 +41,42 @@ def generate_dashboard_data(days: int = 7) -> dict:
         "reliability": summary.get("reliability", {}),
         "performance": summary.get("performance", {}),
         "security": summary.get("security", {}),
-        "timeline": timeline[:20]  # Ultimos 20 eventos
+        "timeline": timeline[:20],  # Ultimos 20 eventos
+        "projects": projects
     }
     
     return data
+
+
+def get_projects() -> list:
+    """Escanea directorios y lee el registro buscando proyectos."""
+    projects = []
+    root = Path(__file__).parent.parent
+    
+    # 1. Proyectos auto-detectados (subdirectorios)
+    try:
+        for item in root.iterdir():
+            if item.is_dir() and not item.name.startswith('.') and item.name not in ['scripts', 'config', 'logs', 'dashboard', 'documentacion', 'templates', 'tests', 'schemas', 'evidence', 'hooks', 'n8n', 'plans']:
+                if (item / "package.json").exists() or (item / "pyproject.toml").exists() or (item / "requirements.txt").exists() or (item / ".git").exists() or any(f.is_file() for f in item.iterdir()):
+                    projects.append(item.name)
+    except Exception as e:
+        print(f"Error scanning projects: {e}")
+
+    # 2. Proyectos registrados externamente
+    config_file = root / "config" / "projects.json"
+    if config_file.exists():
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                registered = json.load(f)
+                for proj in registered:
+                    projects.append(proj['name'])
+        except Exception as e:
+            print(f"Error reading project registry: {e}")
+
+    # 3. Agregar el propio Engine
+    projects.append("Agente Copilot Engine")
+    
+    return sorted(list(set(projects)))
 
 
 def save_dashboard_data():
