@@ -49,15 +49,16 @@ def generate_dashboard_data(days: int = 7) -> dict:
 
 
 def get_projects() -> list:
-    """Escanea directorios y lee el registro buscando proyectos."""
+    """Lee proyectos del registro y solo incluye proyectos explícitamente creados."""
     projects = []
     root = Path(__file__).parent.parent
     
-    # 1. Proyectos auto-detectados (subdirectorios)
+    # 1. Solo proyectos creados con project_creator.py (tienen .agcce_project marker)
     try:
         for item in root.iterdir():
-            if item.is_dir() and not item.name.startswith('.') and item.name not in ['scripts', 'config', 'logs', 'dashboard', 'documentacion', 'templates', 'tests', 'schemas', 'evidence', 'hooks', 'n8n', 'plans']:
-                if (item / "package.json").exists() or (item / "pyproject.toml").exists() or (item / "requirements.txt").exists() or (item / ".git").exists() or any(f.is_file() for f in item.iterdir()):
+            if item.is_dir() and not item.name.startswith('.'):
+                # Verificar si tiene el marcador de proyecto AGCCE
+                if (item / ".agcce_project").exists():
                     projects.append(item.name)
     except Exception as e:
         print(f"Error scanning projects: {e}")

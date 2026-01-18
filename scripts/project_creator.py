@@ -44,13 +44,17 @@ def create_project(name, location=None):
         os.makedirs(project_path / "tests", exist_ok=True)
 
         # 2. Crear archivos base
+        # Marcador AGCCE (para que el dashboard lo detecte)
+        with open(project_path / ".agcce_project", "w", encoding="utf-8") as f:
+            f.write(f"# AGCCE Project Marker\nCreated: {__import__('datetime').datetime.now().isoformat()}\n")
+        
         # README.md
         with open(project_path / "README.md", "w", encoding="utf-8") as f:
             f.write(f"# {name}\n\nProject created with AGCCE Project Creator.\n")
             
         # .gitignore básico
         with open(project_path / ".gitignore", "w", encoding="utf-8") as f:
-            f.write("__pycache__/\n*.pyc\n.env\n.DS_Store\n")
+            f.write("__pycache__/\n*.pyc\n.env\n.DS_Store\n.agcce_project\n")
             
         # task.md inicial
         with open(project_path / "task.md", "w", encoding="utf-8") as f:
