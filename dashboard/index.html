@@ -122,6 +122,35 @@
             cursor: pointer;
         }
 
+        .project-actions {
+            display: flex;
+            gap: 4px;
+        }
+
+        .btn-icon {
+            padding: 8px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .btn-icon:hover {
+            background: var(--accent-red);
+            color: white;
+            border-color: var(--accent-red);
+        }
+
+        .btn-icon.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         .theme-toggle {
             display: flex;
             align-items: center;
@@ -522,6 +551,12 @@
                     <select id="project-select" onchange="filterByProject()">
                         <option value="all">Todos los proyectos</option>
                     </select>
+                    <div class="project-actions">
+                        <button class="btn-icon" id="delete-project-btn" onclick="deleteCurrentProject()"
+                            title="Eliminar proyecto del dashboard">
+                            🗑️
+                        </button>
+                    </div>
                 </div>
 
                 <button class="theme-toggle" onclick="toggleTheme()">
@@ -794,7 +829,52 @@
         function filterByProject() {
             currentProject = document.getElementById('project-select').value;
             loadTelemetryData();
+            updateDeleteButton();
             showNotification(`Filtrado: ${currentProject === 'all' ? 'Todos' : currentProject}`, 'success');
+        }
+
+        function updateDeleteButton() {
+            const deleteBtn = document.getElementById('delete-project-btn');
+            const protectedProjects = ['all', 'Agente Copilot Engine'];
+            if (protectedProjects.includes(currentProject)) {
+                deleteBtn.classList.add('disabled');
+                deleteBtn.disabled = true;
+            } else {
+                deleteBtn.classList.remove('disabled');
+                deleteBtn.disabled = false;
+            }
+        }
+
+        async function deleteCurrentProject() {
+            const protectedProjects = ['all', 'Agente Copilot Engine'];
+            if (protectedProjects.includes(currentProject)) {
+                showNotification('No puedes eliminar este proyecto', 'error');
+                return;
+            }
+
+            if (!confirm(`¿Estás seguro de que quieres eliminar "${currentProject}" del dashboard?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('../scripts/unregister_project.py', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ project: currentProject })
+                });
+
+                if (response.ok) {
+                    showNotification(`Proyecto "${currentProject}" eliminado`, 'success');
+                    currentProject = 'all';
+                    document.getElementById('project-select').value = 'all';
+                    loadTelemetryData();
+                } else {
+                    // Fallback: usar comando Python directamente
+                    showNotification('Ejecuta: python scripts/unregister_project.py "' + currentProject + '"', 'warning');
+                }
+            } catch (e) {
+                showNotification('Ejecuta en terminal: python scripts/unregister_project.py "' + currentProject + '"', 'warning');
+            }
         }
 
         // Charts
@@ -861,6 +941,7 @@
                 select.appendChild(opt);
             });
             select.value = currentValue;
+            updateDeleteButton();
         }
 
         function updateTimeline(events) {

@@ -102,6 +102,36 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
         # Cambiar al directorio del dashboard
         super().__init__(*args, directory=str(Path(__file__).parent.parent), **kwargs)
     
+    def do_POST(self):
+        # Manejar eliminación de proyectos
+        if self.path == '/api/unregister':
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            try:
+                data = json.loads(post_data)
+                project_name = data.get('project')
+                
+                # Importar función de unregister
+                import sys
+                sys.path.insert(0, str(Path(__file__).parent))
+                from unregister_project import unregister_project
+                
+                if unregister_project(project_name):
+                    self.send_response(200)
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'success': True}).encode())
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+            except Exception as e:
+                self.send_response(500)
+                self.end_headers()
+                print(f"Error unregistering project: {e}")
+        else:
+            self.send_response(404)
+            self.end_headers()
+    
     def do_GET(self):
         # Si piden datos, regenerar
         if self.path == '/logs/dashboard_data.json':
