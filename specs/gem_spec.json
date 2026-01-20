@@ -1,7 +1,8 @@
 {
+    "$schema": "http://json-schema.org/draft-07/schema#",
     "bundle_meta": {
         "use_case_id": "BNDL-AGCCE-ULTRA-V4.0-APEX",
-        "version": "4.0.0-APEX",
+        "version": "4.0.0",
         "compiled_at": "2026-01-20T10:00:00Z",
         "compiler_version": "gem-builder-v1.0",
         "risk_score": 10
