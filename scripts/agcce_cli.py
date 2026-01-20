@@ -73,18 +73,19 @@ def print_menu():
     options = [
         ("1", "Indexar Codebase", "Actualiza el índice RAG"),
         ("2", "Generar Plan", "Crea un plan de acción"),
-        ("3", "Ejecutar Plan", "Ejecuta un plan existente"),
-        ("4", "Ver Métricas", "Dashboard y estadísticas"),
-        ("5", "Escanear Seguridad", "Detecta secretos y vulnerabilidades"),
-        ("6", "Verificar Audit Trail", "Integridad del log de auditoría"),
-        ("7", "Usar Template", "Crear plan desde template"),
-        ("8", "Configuración", "Ver/editar config"),
+        ("3", "Generar GemPlan", "Crea plan desde Gem Bundle 🔷"),  # NUEVO
+        ("4", "Ejecutar Plan", "Ejecuta un plan existente"),
+        ("5", "Ver Métricas", "Dashboard y estadísticas"),
+        ("6", "Escanear Seguridad", "Detecta secretos y vulnerabilidades"),
+        ("7", "Verificar Audit Trail", "Integridad del log de auditoría"),
+        ("8", "Usar Template", "Crear plan desde template"),
+        ("9", "Configuración", "Ver/editar config"),
         ("0", "Salir", "")
     ]
     
     for num, title, desc in options:
         if desc:
-            print(f"  {Colors.CYAN}[{num}]{Colors.RESET} {title:<20} {Colors.BLUE}- {desc}{Colors.RESET}")
+            print(f"  {Colors.CYAN}[{num}]{Colors.RESET} {title:<25} {Colors.BLUE}- {desc}{Colors.RESET}")
         else:
             print(f"  {Colors.CYAN}[{num}]{Colors.RESET} {title}")
     print()
@@ -144,6 +145,66 @@ def option_generar_plan():
     
     log_info("Generando plan...")
     run_script("plan_generator.py", args)
+
+
+def option_gemplan():
+    """Opción de generar GemPlan (Plan + Gem Bundle)."""
+    print(make_header("GENERAR GEMPLAN"))
+    
+    print(f"{Colors.CYAN}🔷 GemPlan = Plan AGCCE + Configuración desde Gem Bundle{Colors.RESET}\n")
+    
+    # Verificar que existe gem_plan_generator.py
+    if not os.path.exists("scripts/gem_plan_generator.py"):
+        log_fail("gem_plan_generator.py no encontrado")
+        log_info("Asegúrate de que el script esté en scripts/")
+        return
+    
+    print("Opciones:")
+    print("  [1] Modo interactivo (wizard)")
+    print("  [2] Modo directo (rápido)")
+    print("  [0] Volver")
+    
+    choice = input("\nSelecciona opción: ").strip()
+    
+    if choice == "1":
+        log_info("Iniciando wizard de GemPlan...")
+        run_script("gem_plan_generator.py", ["--interactive"])
+    elif choice == "2":
+        # Listar Gems disponibles
+        gems_dir = Path("gems")
+        if not gems_dir.exists() or not list(gems_dir.glob("*.json")):
+            log_warn("No hay Gem Bundles en gems/")
+            log_info("Copia un Gem Bundle compilado a la carpeta gems/")
+            return
+        
+        gems = list(gems_dir.glob("*.json"))
+        print(f"\nGems disponibles ({len(gems)}):")
+        for i, gem in enumerate(gems, 1):
+            print(f"  [{i}] {gem.name}")
+        
+        try:
+            gem_choice = int(input("\nSelecciona Gem [número]: ").strip())
+            if 1 <= gem_choice <= len(gems):
+                selected_gem = str(gems[gem_choice - 1])
+                
+                goal = input("\n¿Qué quieres que haga AGCCE?\n> ").strip()
+                if not goal:
+                    log_warn("Objetivo vacío, cancelado")
+                    return
+                
+                output = input("Nombre del GemPlan [gemplan_generated.json]: ").strip() or "gemplan_generated.json"
+                if not output.endswith('.json'):
+                    output += '.json'
+                output = f"plans/{output}"
+                
+                log_info("Generando GemPlan...")
+                run_script("gem_plan_generator.py", [
+                    "--gem", selected_gem,
+                    "--goal", goal,
+                    "--output", output
+                ])
+        except:
+            log_warn("Selección inválida")
 
 
 def option_ejecutar_plan():
@@ -309,16 +370,18 @@ def main():
         elif choice == "2":
             option_generar_plan()
         elif choice == "3":
-            option_ejecutar_plan()
+            option_gemplan()  # NUEVO
         elif choice == "4":
-            option_metricas()
+            option_ejecutar_plan()
         elif choice == "5":
-            option_seguridad()
+            option_metricas()
         elif choice == "6":
-            option_audit()
+            option_seguridad()
         elif choice == "7":
-            option_templates()
+            option_audit()
         elif choice == "8":
+            option_templates()
+        elif choice == "9":
             option_config()
         else:
             log_warn("Opción no válida")

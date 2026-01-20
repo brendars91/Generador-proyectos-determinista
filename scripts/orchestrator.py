@@ -3,6 +3,10 @@
 AGCCE Orchestrator
 Orquesta el flujo completo: Validacion -> HITL -> Ejecucion -> Evidencia.
 
+Soporta:
+- Planes AGCCE normales (AGCCE_Plan_v1.schema.json)
+- GemPlans (AGCCE_GemPlan_v1.schema.json) - Con configuración desde Gem Bundle
+
 Uso: python orchestrator.py <plan.json>
 """
 
@@ -12,7 +16,7 @@ import os
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any, Tuple, Optional
 
 # Importar utilidades comunes
 try:
@@ -30,26 +34,27 @@ except ImportError:
     def make_header(title, width=60): return f"\n{'=' * width}\n  {title}\n{'=' * width}\n"
     def make_box(title, width=55): return f"\n  [ {title} ]\n"
 
-
-def run_script(script: str, args: List[str] = []) -> Tuple[bool, str]:
-    """Ejecuta un script Python del proyecto."""
-    cmd = [sys.executable, f"scripts/{script}"] + args
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=300,
-            encoding='utf-8',
-            errors='replace'
-        )
-        return result.returncode == 0, result.stdout + result.stderr
-    except Exception as e:
-        return False, str(e)
+# Importar Gem Loader para GemPlans
+try:
+    from gem_loader import GemLoader
+    HAS_GEM_LOADER = True
+except ImportError:
+    HAS_GEM_LOADER = False
+    print(f"{Colors.YELLOW}⚠️  Warning: gem_loader.py not found. GemPlan support disabled.{Colors.RESET}")
 
 
-def phase_pre_flight(plan_path: str) -> bool:
-    """Fase 1: Pre-flight checks."""
+def is_gemplan(plan: Dict) -> bool:
+    """Detecta si el plan es un GemPlan o un Plan normal."""
+    return "gem_configuration" in plan and plan.get("schema_version") == "AGCCE_GemPlan_v1"
+
+
+def load_and_activate_gem(plan: Dict) -> bool:
+    """
+    Carga un Gem Bundle y configura los agentes MAS.
+    
+    Returns:
+        True si el Gem se cargó exitosamente
+    """
     print(make_header("FASE 1: PRE-FLIGHT CHECK"))
     
     # 1.1 Git status
@@ -190,7 +195,30 @@ def main():
         print(f"{Colors.RED}Error: '{plan_path}' no existe{Colors.RESET}")
         sys.exit(1)
     
-    print(make_box("AGCCE ORCHESTRATOR v1.1.0-OPTIMIZED"))
+    # Cargar plan
+    with open(plan_path, 'r', encoding='utf-8') as f:
+        plan = json.load(f)
+    
+    print(make_box("AGCCE ORCHESTRATOR v1.2.0-GEM-ENABLED"))
+    
+    # Detectar si es GemPlan
+    if is_gemplan(plan):
+        print(f"\n{Colors.CYAN}🔷 GemPlan detected!{Colors.RESET}")
+        print(f"{Colors.BLUE}Loading Gem Bundle configuration...{Colors.RESET}\n")
+        
+        if not HAS_GEM_LOADER:
+            print(f"{Colors.RED}ERROR: gem_loader.py not found. Cannot process GemPlan.{Colors.RESET}")
+            print(f"  Install gem_loader.py in scripts/ directory.")
+            sys.exit(1)
+        
+        # Cargar Gem
+        if not load_and_activate_gem(plan):
+            print(f"{Colors.RED}Failed to load Gem configuration{Colors.RESET}")
+            sys.exit(1)
+        
+        print(f"{Colors.GREEN}✓ Gem loaded and agents configured{Colors.RESET}\n")
+    else:
+        print(f"\n{Colors.BLUE}Standard AGCCE Plan detected{Colors.RESET}\n")
     
     # Ejecutar fases
     phases = [
@@ -237,3 +265,48 @@ def main():
 
 if __name__ == '__main__':
     main()
+    if not HAS_GEM_LOADER:
+        print(f"{Colors.RED}Cannot load Gem: gem_loader.py not available{Colors.RESET}")
+        return False
+    
+    try:
+        gem_config = plan["gem_configuration"]
+        gem_path = gem_config["gem_bundle_path"]
+        
+        # Resolver path relativo
+        if not os.path.isabs(gem_path):
+            gem_path = os.path.join(os.getcwd(), gem_path)
+        
+        if not os.path.exists(gem_path):
+            print(f"{Colors.RED}Gem Bundle not found: {gem_path}{Colors.RESET}")
+            return False
+        
+        # Cargar Gem
+        loader = GemLoader()
+        info = loader.get_gem_info(gem_path)
+        
+        print(f"  📦 Gem: {info['use_case_id']} v{info['version']}")
+        print(f"     Compiled: {info['compiled_at']}")
+        print(f"     Model: {info['model']}")
+        print(f"     Risk Score: {info['risk_score']}")
+        print(f"     Model Armor: {'✓ Enabled' if info['has_model_armor'] else '✗ Disabled'}")
+        print(f"     Grounding: {info['grounding_strategy']}")
+        print()
+        
+        # Crear agent profiles
+        output_dir = "config/gem_profiles"
+        profiles = loader.create_agent_profiles_from_gem(gem_path, output_dir)
+        
+        print(f"  ✓ Created {len(profiles)} agent profiles in {output_dir}/")
+        
+        # Marcar que se usan Gem profiles
+        os.environ["AGCCE_USE_GEM_PROFILES"] = "true"
+        os.environ["AGCCE_GEM_USE_CASE_ID"] = info['use_case_id']
+        
+        return True
+    
+    except Exception as e:
+        print(f"{Colors.RED}Error loading Gem: {e}{Colors.RESET}")
+        import traceback
+        traceback.print_exc()
+        return False
