@@ -1,5 +1,5 @@
 ---
-description: Protocolo de versionado Git local (sin GitHub MCP)
+description: # Pre-Flight Check Workflow  Validaciones obligatorias antes de proponer cualquier caso
 ---
 
 # Git Protocol Workflow
